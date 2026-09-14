@@ -3,7 +3,7 @@ import { site, whatsappLink } from '@/config/site';
 
 export default function Header() {
   return (
-    <header className="sticky top-0 z-40 border-b border-sand-200/80 bg-sand-50/90 backdrop-blur">
+    <header className="sticky top-0 z-40 border-b border-sand-200/80 bg-sand-50/95 backdrop-blur">
       <div className="wrap flex h-16 items-center justify-between gap-4">
         <Link href="/" className="flex items-center gap-2.5">
           <span
@@ -14,23 +14,14 @@ export default function Header() {
           </span>
           <span className="text-[17px] font-semibold tracking-tight">{site.name}</span>
         </Link>
-        <nav className="ml-auto mr-1 flex items-center">
-          <Link
-            href="/about/"
-            className="rounded-full px-3 py-2 text-sm font-medium text-ink-700 hover:bg-sand-100"
-          >
-            About
-          </Link>
-        </nav>
         <a
-          href={whatsappLink(`Hi ${site.founder.name.split(' ')[0]}, I found your site and I have a question about a trip.`)}
+          href={whatsappLink('Hello, I would like to ask about a trip.')}
           target="_blank"
           rel="noopener noreferrer"
           className="btn-wa h-10 min-h-0 px-4 text-sm"
         >
           <WhatsAppGlyph />
-          <span className="hidden sm:inline">WhatsApp us</span>
-          <span className="sm:hidden">Chat</span>
+          WhatsApp
         </a>
       </div>
     </header>

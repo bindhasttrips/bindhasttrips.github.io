@@ -39,6 +39,9 @@
   .wrap {
     @apply mx-auto w-full max-w-content px-5 sm:px-6;
   }
+  .input {
+    @apply w-full min-h-[3rem] rounded-xl border border-sand-300 bg-white px-4 text-base text-ink outline-none transition-colors focus:border-clay focus:ring-1 focus:ring-clay;
+  }
   .eyebrow {
     @apply text-xs font-semibold uppercase tracking-[0.14em] text-clay;
   }

@@ -1,33 +1,35 @@
-/**
- * Placeholder. Replaced in build step 2 with the real multi-step inquiry form.
- * It exists now so links from the landing and destination pages do not 404.
- */
-import Link from 'next/link';
-import { whatsappLink } from '@/config/site';
+import { Suspense } from 'react';
+import PlanForm from '@/components/PlanForm';
 
-export const metadata = { title: 'Plan your trip' };
+export const metadata = {
+  title: 'Send your requirements',
+  description:
+    'Tell us your destination, dates, group size and the activities you want, and see an estimate immediately.',
+};
 
 export default function PlanPage() {
   return (
-    <section className="wrap py-24 text-center">
-      <p className="eyebrow">Coming next</p>
-      <h1 className="mt-3 text-3xl">The planner form lands here</h1>
-      <p className="mx-auto mt-3 max-w-md text-[17px] text-ink-700">
-        Step 2 of the build. For now, message us and we will do it the old-fashioned way.
-      </p>
-      <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-        <a
-          href={whatsappLink('Hi, I want to plan a trip.')}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-wa w-full sm:w-auto"
-        >
-          Message us on WhatsApp
-        </a>
-        <Link href="/" className="btn-ghost w-full sm:w-auto">
-          Back to home
-        </Link>
+    <Suspense fallback={<Loading />}>
+      <PlanForm />
+    </Suspense>
+  );
+}
+
+/**
+ * The form reads ?dest= with useSearchParams, which only resolves after
+ * hydration on a static export. This is what the first paint shows.
+ */
+function Loading() {
+  return (
+    <div className="wrap max-w-2xl py-10">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-sand-200">
+        <div className="h-full w-1/6 rounded-full bg-clay" />
       </div>
-    </section>
+      <div className="mt-8 h-8 w-3/4 rounded bg-sand-200" />
+      <div className="mt-6 space-y-3">
+        <div className="h-20 rounded-xl bg-sand-100" />
+        <div className="h-20 rounded-xl bg-sand-100" />
+      </div>
+    </div>
   );
 }

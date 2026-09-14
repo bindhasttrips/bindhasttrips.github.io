@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types lib/*.test.ts"
+    "test": "node --test lib/estimate.test.ts"
   },
   "dependencies": {
     "next": "^15.5.0",
