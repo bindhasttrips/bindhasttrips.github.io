@@ -39,12 +39,29 @@ the planner, and the estimator picks up its rate card. No component changes.
 
 Push to `main`. `.github/workflows/deploy.yml` builds and publishes to Pages.
 
+Live at https://bindhasttrips.github.io/
+
+### Moving to a custom domain later
+
+`bindhasttrips.com` was unregistered as of this writing. When you buy it:
+
+1. `echo bindhasttrips.com > public/CNAME` and push.
+2. At your registrar, add four `A` records for the apex pointing at
+   `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`,
+   and a `CNAME` for `www` pointing at `bindhasttrips.github.io`.
+3. Settings → Pages → set the custom domain, then tick **Enforce HTTPS** once
+   the certificate is issued.
+
+`NEXT_PUBLIC_BASE_PATH` stays unset throughout, so nothing else changes.
+
 Set these as repository **Variables** (Settings → Secrets and variables → Actions):
 
 - `NEXT_PUBLIC_WHATSAPP_NUMBER` — country code first, digits only, e.g. `919876543210`
 - `NEXT_PUBLIC_APPS_SCRIPT_URL` — added in build step 4
-- `NEXT_PUBLIC_BASE_PATH` — **leave unset** for a custom domain. Only set it to
-  `/<repo>` if serving from `username.github.io/<repo>`.
+- `NEXT_PUBLIC_BASE_PATH` — **leave unset.** This repo is named
+  `bindhasttrips.github.io`, so the site serves from the domain root and needs no
+  basePath. Only set it (to `/<repo>`) if you ever move the site into a project
+  repo served from `<owner>.github.io/<repo>`.
 
 Nothing secret belongs in any of these. They all ship to the browser.
 
