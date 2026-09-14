@@ -39,7 +39,11 @@ jobs:
       # without it GitHub Pages strips the _next/ directory and the site loads naked HTML.
       - run: touch out/.nojekyll
 
+      # enablement: true turns Pages on for the repo if it is not already,
+      # so there is no manual step in Settings -> Pages.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: out

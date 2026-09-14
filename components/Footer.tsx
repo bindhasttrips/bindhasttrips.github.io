@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { site, whatsappLink } from '@/config/site';
 import { WhatsAppGlyph } from './Header';
 
@@ -19,9 +20,9 @@ export default function Footer() {
           </a>
           <p className="mt-3 text-sm text-ink-500">{site.responsePromise}</p>
           <p className="mt-3 text-sm">
-            <a className="font-semibold text-sea underline underline-offset-4" href="/about/">
+            <Link className="font-semibold text-sea underline underline-offset-4" href="/about/">
               More about {site.founder.name} →
-            </a>
+            </Link>
           </p>
           <p className="mt-1 text-sm text-ink-500">
             Or email{' '}
