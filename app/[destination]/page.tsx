@@ -26,7 +26,7 @@ export async function generateMetadata({
   const d = getDestination(slug);
   if (!d) return {};
   return {
-    title: `${d.name} packages for first-time travellers`,
+    title: `${d.name} packages, handled end to end`,
     description: `${d.tagline} ${d.summary}`,
   };
 }

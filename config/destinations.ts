@@ -4,7 +4,7 @@ const dubai: Destination = {
   slug: 'dubai',
   name: 'Dubai',
   country: 'United Arab Emirates',
-  tagline: 'The easiest first trip abroad an Indian passport can take.',
+  tagline: 'The easiest international trip an Indian passport can take.',
   heroImage: '/images/dubai-hero.jpg',
   heroAlt: 'Dubai skyline at dusk seen from the marina',
   cardImage: '/images/dubai-card.jpg',
@@ -27,7 +27,7 @@ const dubai: Destination = {
     handledByUs:
       'You send us photos of your documents on WhatsApp. We fill the form, pay the fee, chase the application and send you the visa PDF. You do not visit a centre and you do not queue anywhere.',
     caveat:
-      'First-time travellers with a blank passport are occasionally asked for a bank statement. We will tell you upfront if we think that applies to you.',
+      'Travellers with a blank passport are occasionally asked for a bank statement. We will tell you upfront if we think that applies to you.',
   },
   costSamples: [
     { label: 'Metro ride across town', fromInr: 75, toInr: 180 },
@@ -46,7 +46,7 @@ const dubai: Destination = {
       days: 5,
       nights: 4,
       fromPricePerPerson: 42000,
-      blurb: 'The classic first trip. Everything you have seen in photos, none of the filler.',
+      blurb: 'The classic Dubai run. Everything you have seen in photos, none of the filler.',
       highlights: [
         '4-star hotel near the Metro, twin sharing',
         'Desert safari with BBQ dinner',
@@ -159,7 +159,7 @@ const dubai: Destination = {
       { label: 'off', months: [5, 6, 7, 8, 9], multiplier: 0.85, note: 'Hot outside, but everything worth doing is indoors and prices drop a lot.' },
     ],
   },
-  brochure: '/brochures/dubai-first-timers.pdf',
+  brochure: '/brochures/dubai-guide.pdf',
   enabled: true,
 };
 
@@ -188,7 +188,7 @@ const thailand: Destination = {
       'Thailand Digital Arrival Card, filled online before you fly — we do this for you',
     ],
     handledByUs:
-      'There is no visa to process, which removes the single most stressful part of a first trip. We still fill your arrival card and brief you on exactly what immigration will ask.',
+      'There is no visa to process, which removes the single most stressful part of planning a trip. We still fill your arrival card and brief you on exactly what immigration will ask.',
     caveat:
       'Visa-free entry is a policy that governments change. We confirm the rule actually in force on your travel dates before you pay anything.',
   },
@@ -325,7 +325,7 @@ const thailand: Destination = {
       { label: 'off', months: [5, 6, 7, 8, 9], multiplier: 0.85, note: 'Monsoon, but usually short sharp afternoon rain rather than all-day. Prices drop sharply.' },
     ],
   },
-  brochure: '/brochures/thailand-first-timers.pdf',
+  brochure: '/brochures/thailand-guide.pdf',
   enabled: true,
 };
 

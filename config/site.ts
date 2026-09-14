@@ -15,9 +15,9 @@ export const site = {
     livesIn: 'Washington, DC',
     dayJob: 'PhD student in Physics',
     blurb:
-      'I am from Hingoli, I am doing a PhD in Physics in Washington DC, and I have spent years planning trips for friends and cousins taking their first flight out of India. There is no call centre here. You message me, I answer.',
+      'I am from Hingoli, I am doing a PhD in Physics in Washington DC, and I have spent years planning other people\u2019s trips \u2014 visas, flights, the lot. There is no call centre here. You message me, I answer.',
   },
-  tagline: 'First trip abroad? We handle the whole thing.',
+  tagline: 'Trips abroad, handled end to end.',
   url: 'https://bindhasttrips.com', // TODO: your custom domain
   email: 'hello@bindhasttrips.com', // TODO
   basedIn: 'Washington, DC', // TODO: confirm what you want shown as your base

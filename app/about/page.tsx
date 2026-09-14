@@ -6,7 +6,7 @@ import { WhatsAppGlyph } from '@/components/Header';
 export const metadata = {
   title: 'About Deep',
   description:
-    'Deep Ghuge is from Hingoli, lives in Washington DC, is doing a PhD in Physics, and plans trips for people flying out of India for the first time.',
+    'Deep Ghuge is from Hingoli, lives in Washington DC, is doing a PhD in Physics, and plans trips abroad for people who would rather not plan them alone.',
 };
 
 /**
@@ -56,8 +56,8 @@ export default function AboutPage() {
             <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-ink-700">
               I am from {site.founder.from}. I live in {site.founder.livesIn}, where I am a{' '}
               {site.founder.dayJob}. I travel as much as a graduate stipend allows, and I
-              have spent years helping friends and family take their first flight out of
-              India without losing their minds over it.
+              have spent years planning trips for friends and family who would rather not
+              lose three weekends to booking sites and visa portals.
             </p>
             <p className="mt-4 max-w-xl text-[17px] leading-relaxed text-ink-700">
               Bindhast is that, done properly, for people I have not met yet.

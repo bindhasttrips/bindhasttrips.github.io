@@ -14,7 +14,7 @@ const steps = [
   {
     n: 2,
     title: 'See a price range immediately',
-    body: 'A real range, not a teaser number. You also get our first-timer brochure to download right there.',
+    body: 'A real range, not a teaser number. You also get our destination brochure to download right there.',
   },
   {
     n: 3,
@@ -56,21 +56,21 @@ export default function HomePage() {
           <div>
             <p className="eyebrow">Dubai · Thailand</p>
             <h1 className="mt-3 text-[2.1rem] leading-[1.12] sm:text-5xl">
-              First trip abroad?
+              Your trip abroad,
               <br />
-              We handle the whole thing.
+              handled end to end.
             </h1>
             <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-700">
               Visa, flights, hotels, transfers, activities — one bundled price and one person
-              on WhatsApp who actually answers. Built for people flying out of India for the
-              first time, who would rather not figure this out alone.
+              on WhatsApp who actually answers. For anyone who would rather spend their
+              evenings looking forward to the trip than buried in booking tabs and visa forms.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/plan/" className="btn-primary w-full sm:w-auto">
                 Get a price in 2 minutes
               </Link>
               <a
-                href={whatsappLink('Hi, I am thinking about my first trip abroad and I have some questions.')}
+                href={whatsappLink('Hi, I am planning a trip abroad and I have some questions.')}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn-ghost w-full sm:w-auto"
