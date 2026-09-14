@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bindhast-dev",
+      "runtimeExecutable": "/Users/deepghuge/.local/node/bin/node",
+      "runtimeArgs": ["node_modules/next/dist/bin/next", "dev", "--port", "3111"],
+      "port": 3111
+    }
+  ]
+}
