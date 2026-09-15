@@ -1,18 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { liveDestinations, getDestination } from '@/config/destinations';
-import { site, whatsappLink } from '@/config/site';
+import { liveDestinations, getDestination, getTier } from '@/config/destinations';
+import { TRIP_STYLES, type Activity, type TripStyle } from '@/config/types';
+import { site } from '@/config/site';
 import { estimateTrip } from '@/lib/estimate';
 import { formatInr, formatInrRange } from '@/lib/format';
 import { asset } from '@/lib/asset';
+import { sortForParty, matchesStyles, type Party } from '@/lib/suggest';
 import { submitInquiry, normaliseIndianMobile, type SubmitResult } from '@/lib/inquiry';
-import { WhatsAppGlyph } from '@/components/Header';
 
-const STORAGE_KEY = 'bindhast-plan-v1';
-const TOTAL_STEPS = 6;
+const STORAGE_KEY = 'bindhast-plan-v2';
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -22,19 +21,26 @@ const MONTH_NAMES = [
 const BUDGET_BANDS = [
   'Under 60,000 per person',
   '60,000 to 1,00,000 per person',
-  'Over 1,00,000 per person',
+  '1,00,000 to 1,50,000 per person',
+  'Over 1,50,000 per person',
   'Not sure yet',
 ];
 
+/** A day that is fuller than this gets a gentle warning, never a block. */
+const LONG_DAY_HOURS = 11;
+
 interface FormState {
   destination: string;
+  tierId: string;
   travelMonth: number;
   travelYear: number;
   datesFlexible: boolean;
-  nights: number;
   adults: number;
   children: number;
-  activities: string[];
+  seniors: number;
+  styles: TripStyle[];
+  /** Day number to activity ids. This is the itinerary. */
+  dayPlan: Record<string, string[]>;
   budgetBand: string;
   name: string;
   phone: string;
@@ -42,542 +48,780 @@ interface FormState {
   notes: string;
 }
 
-function initialState(): FormState {
-  const now = new Date();
-  const next = new Date(now.getFullYear(), now.getMonth() + 2, 1);
-  return {
-    destination: '',
-    travelMonth: next.getMonth() + 1,
-    travelYear: next.getFullYear(),
-    datesFlexible: true,
-    nights: 5,
-    adults: 2,
-    children: 0,
-    activities: [],
-    budgetBand: '',
-    name: '',
-    phone: '',
-    email: '',
-    notes: '',
-  };
+function defaultMonth() {
+  const d = new Date();
+  const next = new Date(d.getFullYear(), d.getMonth() + 2, 1);
+  return { month: next.getMonth() + 1, year: next.getFullYear() };
+}
+
+function planFromTier(destSlug: string, tierId: string): Record<string, string[]> {
+  const tier = getTier(destSlug, tierId);
+  const plan: Record<string, string[]> = {};
+  tier?.itinerary.forEach((d) => {
+    plan[String(d.day)] = [...(d.suggestedActivityIds ?? [])];
+  });
+  return plan;
 }
 
 export default function PlanForm() {
   const params = useSearchParams();
-  const [form, setForm] = useState<FormState>(initialState);
-  const [step, setStep] = useState(1);
-  const [restored, setRestored] = useState(false);
+  const [form, setForm] = useState<FormState | null>(null);
+  const [openPicker, setOpenPicker] = useState<string | null>(null);
+  const [showAllFor, setShowAllFor] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
-  const [phoneError, setPhoneError] = useState('');
+  const [error, setError] = useState('');
+  const contactRef = useRef<HTMLDivElement>(null);
 
-  // Restore a dropped session before applying the query parameter, so a fresh
-  // link with ?dest= still wins over whatever was saved earlier.
+  // Restore a dropped session, then let the query string override destination
+  // and tier so a fresh link from WhatsApp always lands where it should.
   useEffect(() => {
     let saved: Partial<FormState> = {};
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) saved = JSON.parse(raw) as Partial<FormState>;
     } catch {
-      // Private browsing or blocked storage. Continue with a clean form.
+      // Blocked storage. Carry on with a clean slate.
     }
-    const fromQuery = params.get('dest');
-    setForm((f) => ({
-      ...f,
-      ...saved,
-      destination:
-        (fromQuery && getDestination(fromQuery)?.slug) || saved.destination || f.destination,
-    }));
-    setRestored(true);
+
+    const qDest = getDestination(params.get('dest'))?.slug;
+    const destination = qDest || saved.destination || liveDestinations[0].slug;
+    const qTier = params.get('tier');
+    const tierId =
+      getTier(destination, qTier)?.id ??
+      (saved.destination === destination ? saved.tierId : undefined) ??
+      getTier(destination, null)!.id;
+
+    const { month, year } = defaultMonth();
+    const sameTrip = saved.destination === destination && saved.tierId === tierId;
+
+    setForm({
+      destination,
+      tierId,
+      travelMonth: saved.travelMonth ?? month,
+      travelYear: saved.travelYear ?? year,
+      datesFlexible: saved.datesFlexible ?? true,
+      adults: saved.adults ?? 2,
+      children: saved.children ?? 0,
+      seniors: saved.seniors ?? 0,
+      styles: saved.styles ?? [],
+      dayPlan: sameTrip && saved.dayPlan ? saved.dayPlan : planFromTier(destination, tierId),
+      budgetBand: saved.budgetBand ?? '',
+      name: saved.name ?? '',
+      phone: saved.phone ?? '',
+      email: saved.email ?? '',
+      notes: saved.notes ?? '',
+    });
   }, [params]);
 
   useEffect(() => {
-    if (!restored) return;
+    if (!form) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
     } catch {
-      // Nothing to do. Losing persistence is not worth breaking the form over.
+      // Losing persistence is not worth breaking the page over.
     }
-  }, [form, restored]);
+  }, [form]);
 
-  const destination = getDestination(form.destination);
+  const destination = form ? getDestination(form.destination) : undefined;
+  const tier = form && destination ? getTier(form.destination, form.tierId) : undefined;
+
+  const chosenIds = useMemo(
+    () => (form ? Object.values(form.dayPlan).flat() : []),
+    [form],
+  );
 
   const estimate = useMemo(() => {
-    if (!destination) return null;
+    if (!form || !destination) return null;
     return estimateTrip({
       destination,
-      nights: form.nights,
+      nights: tier?.nights ?? 4,
       adults: form.adults,
       children: form.children,
-      activityIds: form.activities,
+      seniors: form.seniors,
+      activityIds: chosenIds,
       travelMonth: form.travelMonth,
     });
-  }, [destination, form.nights, form.adults, form.children, form.activities, form.travelMonth]);
+  }, [form, destination, tier, chosenIds]);
 
-  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
-    setForm((f) => ({ ...f, [key]: value }));
+  if (!form || !destination || !tier) return null;
+
+  const party: Party = { adults: form.adults, children: form.children, seniors: form.seniors };
+  const season = estimate?.season;
+
+  function update(patch: Partial<FormState>) {
+    setForm((f) => (f ? { ...f, ...patch } : f));
   }
 
-  function toggleActivity(id: string) {
-    setForm((f) => ({
-      ...f,
-      activities: f.activities.includes(id)
-        ? f.activities.filter((a) => a !== id)
-        : [...f.activities, id],
-    }));
+  function changeTrip(destSlug: string, tierId: string) {
+    update({
+      destination: destSlug,
+      tierId,
+      dayPlan: planFromTier(destSlug, tierId),
+    });
+    setOpenPicker(null);
   }
 
-  const canAdvance =
-    step === 1 ? Boolean(destination)
-    : step === 3 ? form.adults >= 1
-    : step === 5 ? Boolean(form.budgetBand)
-    : true;
+  function toggleStyle(style: TripStyle) {
+    update({
+      styles: form!.styles.includes(style)
+        ? form!.styles.filter((s) => s !== style)
+        : [...form!.styles, style],
+    });
+  }
+
+  function addActivity(day: number, id: string) {
+    const key = String(day);
+    const current = form!.dayPlan[key] ?? [];
+    if (current.includes(id)) return;
+    update({ dayPlan: { ...form!.dayPlan, [key]: [...current, id] } });
+  }
+
+  function removeActivity(day: number, id: string) {
+    const key = String(day);
+    update({
+      dayPlan: { ...form!.dayPlan, [key]: (form!.dayPlan[key] ?? []).filter((a) => a !== id) },
+    });
+  }
+
+  function activityById(id: string): Activity | undefined {
+    return destination!.activities.find((a) => a.id === id);
+  }
 
   async function handleSubmit() {
-    const phone = normaliseIndianMobile(form.phone);
-    if (!form.name.trim()) return setPhoneError('Please enter your name.');
-    if (!phone) return setPhoneError('Enter a 10 digit Indian mobile number.');
-    setPhoneError('');
+    const phone = normaliseIndianMobile(form!.phone);
+    if (!form!.name.trim()) {
+      setError('Please enter your name.');
+      return;
+    }
+    if (!phone) {
+      setError('Enter a 10 digit Indian mobile number.');
+      return;
+    }
+    setError('');
     setSubmitting(true);
+
+    const itineraryText = tier!.itinerary
+      .map((d) => {
+        const names = (form!.dayPlan[String(d.day)] ?? [])
+          .map((id) => activityById(id)?.name ?? id)
+          .join('; ');
+        return `Day ${d.day} (${d.city ?? ''}): ${names || 'nothing booked'}`;
+      })
+      .join(' | ');
+
+    const suggested = tier!.itinerary.flatMap((d) => d.suggestedActivityIds ?? []);
+    const removed = suggested.filter((id) => !chosenIds.includes(id));
+    const added = chosenIds.filter((id) => !suggested.includes(id));
+
     const res = await submitInquiry({
-      name: form.name.trim(),
+      name: form!.name.trim(),
       phone,
-      email: form.email.trim(),
-      destination: destination?.name ?? form.destination,
-      travelMonth: `${MONTH_NAMES[form.travelMonth - 1]} ${form.travelYear}`,
-      datesFlexible: form.datesFlexible,
-      nights: form.nights,
-      adults: form.adults,
-      children: form.children,
-      activities: form.activities.map(
-        (id) => destination?.activities.find((a) => a.id === id)?.name ?? id,
-      ),
-      budgetBand: form.budgetBand,
+      email: form!.email.trim(),
+      destination: destination!.name,
+      tier: tier!.name,
+      travelMonth: `${MONTH_NAMES[form!.travelMonth - 1]} ${form!.travelYear}`,
+      datesFlexible: form!.datesFlexible,
+      nights: tier!.nights,
+      adults: form!.adults,
+      children: form!.children,
+      seniors: form!.seniors,
+      styles: form!.styles,
+      activities: chosenIds.map((id) => activityById(id)?.name ?? id),
+      activitiesAdded: added.map((id) => activityById(id)?.name ?? id),
+      suggestionsRemoved: removed.map((id) => activityById(id)?.name ?? id),
+      itinerary: itineraryText,
+      activityTotal: estimate?.activityTotal ?? 0,
+      budgetBand: form!.budgetBand,
       estimateLow: estimate?.total.low ?? 0,
       estimateHigh: estimate?.total.high ?? 0,
-      notes: form.notes.trim(),
+      notes: form!.notes.trim(),
       source: typeof window === 'undefined' ? '' : window.location.href,
     });
+
     setSubmitting(false);
     setResult(res);
   }
 
   if (result) {
     return (
-      <Result
+      <Sent
         result={result}
-        form={form}
+        name={form.name}
+        destinationName={destination.name}
+        brochure={destination.brochure}
         estimate={estimate}
-        destinationName={destination?.name ?? ''}
-        brochure={destination?.brochure ?? ''}
-        monthLabel={`${MONTH_NAMES[form.travelMonth - 1]} ${form.travelYear}`}
       />
     );
   }
 
-  const adultActivities = destination?.activities.filter((a) => a.audience !== 'kids') ?? [];
-  const kidsActivities = destination?.activities.filter((a) => a.audience !== 'adult') ?? [];
-
   return (
-    <div className="wrap max-w-2xl py-10">
-      <Progress step={step} />
+    <div className="wrap max-w-3xl pb-28 pt-8">
+      <header>
+        <p className="eyebrow">Plan your trip</p>
+        <h1 className="mt-2 text-[1.9rem] leading-tight sm:text-4xl">
+          Your {destination.name} itinerary
+        </h1>
+        <p className="mt-3 text-[16px] leading-relaxed text-ink-700">
+          We have filled in a suggested plan below. Change anything you like, remove what you
+          do not want, and leave days empty if you would rather decide later. Nothing here is
+          fixed.
+        </p>
+      </header>
 
-      {step === 1 && (
-        <Step title="Where would you like to go?">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {liveDestinations.map((d) => (
-              <Choice
-                key={d.slug}
-                selected={form.destination === d.slug}
-                onClick={() => set('destination', d.slug)}
-                title={d.name}
-                subtitle={d.tagline}
-              />
-            ))}
-          </div>
-          <p className="mt-4 text-sm text-ink-500">
-            Malaysia, Singapore and Vietnam are not available yet. If you want one of those,
-            send us a message and we will tell you when they open.
-          </p>
-        </Step>
-      )}
-
-      {step === 2 && (
-        <Step title="When do you want to travel, and for how long?">
-          <Field label="Month of travel">
-            <div className="grid grid-cols-2 gap-3">
-              <select
-                className="input"
-                value={form.travelMonth}
-                onChange={(e) => set('travelMonth', Number(e.target.value))}
-              >
-                {MONTH_NAMES.map((m, i) => (
-                  <option key={m} value={i + 1}>{m}</option>
-                ))}
-              </select>
-              <select
-                className="input"
-                value={form.travelYear}
-                onChange={(e) => set('travelYear', Number(e.target.value))}
-              >
-                {[0, 1].map((offset) => {
-                  const y = new Date().getFullYear() + offset;
-                  return <option key={y} value={y}>{y}</option>;
-                })}
-              </select>
-            </div>
-          </Field>
-
-          <label className="mt-4 flex items-start gap-3 rounded-xl border border-sand-300 bg-white p-4">
-            <input
-              type="checkbox"
-              className="mt-1 h-5 w-5 accent-[#C4551F]"
-              checked={form.datesFlexible}
-              onChange={(e) => set('datesFlexible', e.target.checked)}
+      {/* Destination and package */}
+      <Section title="Destination and length">
+        <div className="grid gap-3 sm:grid-cols-2">
+          {liveDestinations.map((d) => (
+            <Choice
+              key={d.slug}
+              selected={form.destination === d.slug}
+              onClick={() => changeTrip(d.slug, getTier(d.slug, null)!.id)}
+              title={d.name}
+              subtitle={d.tagline}
             />
-            <span className="text-[15px] leading-relaxed text-ink-700">
-              My dates are flexible. Tell me if moving them lowers the price.
-            </span>
+          ))}
+        </div>
+        <div className="mt-4 grid gap-3">
+          {destination.tiers.map((t) => (
+            <Choice
+              key={t.id}
+              selected={form.tierId === t.id}
+              onClick={() => changeTrip(destination.slug, t.id)}
+              title={`${t.name}, ${t.days} days`}
+              subtitle={t.blurb}
+              trailing={`from ${formatInr(t.fromPricePerPerson)}`}
+            />
+          ))}
+        </div>
+        <p className="mt-3 text-sm text-ink-500">
+          Changing the destination or package rebuilds the suggested itinerary below.
+        </p>
+      </Section>
+
+      {/* When */}
+      <Section title="When are you travelling?">
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-sm font-semibold">Month</span>
+            <select
+              className="input mt-2"
+              value={form.travelMonth}
+              onChange={(e) => update({ travelMonth: Number(e.target.value) })}
+            >
+              {MONTH_NAMES.map((m, i) => (
+                <option key={m} value={i + 1}>{m}</option>
+              ))}
+            </select>
           </label>
+          <label className="block">
+            <span className="text-sm font-semibold">Year</span>
+            <select
+              className="input mt-2"
+              value={form.travelYear}
+              onChange={(e) => update({ travelYear: Number(e.target.value) })}
+            >
+              {[0, 1].map((o) => {
+                const y = new Date().getFullYear() + o;
+                return <option key={y} value={y}>{y}</option>;
+              })}
+            </select>
+          </label>
+        </div>
 
-          <Field label={`Trip length: ${form.nights} nights`} className="mt-6">
-            <input
-              type="range"
-              min={3}
-              max={14}
-              value={form.nights}
-              onChange={(e) => set('nights', Number(e.target.value))}
-              className="w-full accent-[#C4551F]"
-            />
-            <div className="flex justify-between text-xs text-ink-500">
-              <span>3 nights</span>
-              <span>14 nights</span>
-            </div>
-          </Field>
-        </Step>
-      )}
+        <label className="mt-3 flex items-start gap-3 rounded-xl border border-sand-300 bg-white p-4">
+          <input
+            type="checkbox"
+            className="mt-1 h-5 w-5 accent-[#C4551F]"
+            checked={form.datesFlexible}
+            onChange={(e) => update({ datesFlexible: e.target.checked })}
+          />
+          <span className="text-[15px] leading-relaxed text-ink-700">
+            My dates are flexible. Tell me if moving them lowers the price.
+          </span>
+        </label>
 
-      {step === 3 && (
-        <Step title="Who is travelling?">
-          <Counter
-            label="Adults"
-            hint="12 years and over"
-            value={form.adults}
-            min={1}
-            onChange={(v) => set('adults', v)}
-          />
-          <Counter
-            label="Children"
-            hint="Under 12. Activity and hotel pricing differs."
-            value={form.children}
-            min={0}
-            onChange={(v) => set('children', v)}
-          />
-        </Step>
-      )}
-
-      {step === 4 && (
-        <Step title="What would you like to do there?">
-          <p className="-mt-2 mb-5 text-[15px] leading-relaxed text-ink-700">
-            Optional. Prices shown are per adult and are indicative. Skip this if you would
-            rather decide later.
-          </p>
-          <ActivityGroup
-            heading="Activities"
-            items={adultActivities}
-            selected={form.activities}
-            onToggle={toggleActivity}
-          />
-          <ActivityGroup
-            heading="Good with children"
-            items={kidsActivities}
-            selected={form.activities}
-            onToggle={toggleActivity}
-          />
-        </Step>
-      )}
-
-      {step === 5 && (
-        <Step title="What budget are you working with?">
-          <p className="-mt-2 mb-5 text-[15px] leading-relaxed text-ink-700">
-            Per person, including flights. This helps us suggest the right hotels rather than
-            sending you a quote you did not want.
-          </p>
-          <div className="grid gap-3">
-            {BUDGET_BANDS.map((band) => (
-              <Choice
-                key={band}
-                selected={form.budgetBand === band}
-                onClick={() => set('budgetBand', band)}
-                title={band === 'Not sure yet' ? band : `₹${band}`}
-              />
-            ))}
+        {season && (
+          <div
+            className={`mt-3 rounded-xl p-4 text-[15px] leading-relaxed ${
+              season.label === 'peak'
+                ? 'bg-clay-100 text-ink-700'
+                : season.label === 'off'
+                  ? 'bg-sea-100 text-ink-700'
+                  : 'bg-sand-100 text-ink-700'
+            }`}
+          >
+            <strong className="font-semibold">
+              {MONTH_NAMES[form.travelMonth - 1]} is {season.label === 'off' ? 'off' : season.label} season.
+            </strong>{' '}
+            {season.note} {destination.bestMonthsSummary}
           </div>
-        </Step>
+        )}
+      </Section>
+
+      {/* Who */}
+      <Section title="Who is travelling?">
+        <Counter label="Adults" hint="12 to 59" value={form.adults} min={0} onChange={(v) => update({ adults: v })} />
+        <Counter label="Children" hint="Under 12. Hotel and activity pricing differs." value={form.children} min={0} onChange={(v) => update({ children: v })} />
+        <Counter label="Seniors" hint="60 and over. Same price, gentler suggestions." value={form.seniors} min={0} onChange={(v) => update({ seniors: v })} />
+      </Section>
+
+      {/* Style */}
+      <Section
+        title="What kind of trip is this?"
+        subtitle="Pick as many as apply. This reorders the suggestions below so the right things surface first. It does not hide anything."
+      >
+        <div className="flex flex-wrap gap-2">
+          {TRIP_STYLES.map((s) => {
+            const on = form.styles.includes(s.id);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                aria-pressed={on}
+                onClick={() => toggleStyle(s.id)}
+                title={s.hint}
+                className={`min-h-[2.75rem] rounded-full border px-4 text-sm font-semibold transition-colors ${
+                  on
+                    ? 'border-clay bg-clay text-white'
+                    : 'border-sand-300 bg-white text-ink-700 hover:bg-sand-100'
+                }`}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Itinerary */}
+      <Section
+        title="Your day by day plan"
+        subtitle="Suggested activities are already added. Remove anything you do not want and add whatever you do."
+      >
+        <div className="space-y-4">
+          {tier.itinerary.map((day) => {
+            const key = String(day.day);
+            const ids = form.dayPlan[key] ?? [];
+            const chosen = ids.map(activityById).filter(Boolean) as Activity[];
+            const hours = chosen.reduce((sum, a) => sum + a.durationHours, 0);
+            const pickerOpen = openPicker === key;
+
+            const pool = destination.activities.filter((a) => {
+              if (ids.includes(a.id)) return false;
+              if (showAllFor === key) return true;
+              return !day.city || a.city === day.city;
+            });
+            const ranked = sortForParty(pool, form.styles, party);
+
+            return (
+              <div key={day.day} className="card p-5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-lg">
+                    Day {day.day}. {day.title}
+                  </h3>
+                  {day.city && <span className="shrink-0 text-sm text-ink-500">{day.city}</span>}
+                </div>
+                <p className="mt-1 text-[15px] leading-relaxed text-ink-700">{day.detail}</p>
+
+                {chosen.length > 0 ? (
+                  <ul className="mt-4 space-y-2">
+                    {chosen.map((a) => (
+                      <li
+                        key={a.id}
+                        className="flex items-start gap-3 rounded-xl border border-sand-200 bg-sand-50 p-3"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="font-semibold">{a.name}</span>
+                            <span className="shrink-0 text-sm font-semibold text-clay">
+                              {priceLabel(a.indicativePrice)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-[14px] leading-snug text-ink-700">
+                            {a.description}
+                          </p>
+                          <p className="mt-1 text-xs text-ink-300">
+                            About {a.durationHours} hours
+                            {a.note ? `. ${a.note}` : ''}
+                            {a.infoUrl ? ' ' : ''}
+                          </p>
+                          {(a.infoUrl || a.videoUrl) && (
+                            <p className="mt-1 flex gap-3 text-xs">
+                              {a.infoUrl && (
+                                <a className="font-semibold text-sea underline underline-offset-2" href={a.infoUrl} target="_blank" rel="noopener noreferrer">
+                                  More detail
+                                </a>
+                              )}
+                              {a.videoUrl && (
+                                <a className="font-semibold text-sea underline underline-offset-2" href={a.videoUrl} target="_blank" rel="noopener noreferrer">
+                                  Watch a video
+                                </a>
+                              )}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          aria-label={`Remove ${a.name}`}
+                          onClick={() => removeActivity(day.day, a.id)}
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-sand-300 bg-white text-ink-500 hover:bg-sand-100"
+                        >
+                          ×
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-4 rounded-xl border border-dashed border-sand-300 p-3 text-[15px] text-ink-500">
+                    Nothing planned. A free day is a perfectly good choice.
+                  </p>
+                )}
+
+                {hours > LONG_DAY_HOURS && (
+                  <p className="mt-3 text-sm text-clay">
+                    That is about {Math.round(hours)} hours of activity in one day. It can be
+                    done, but we would usually move something to another day.
+                  </p>
+                )}
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="btn-ghost h-11 min-h-0 px-4 text-sm"
+                    onClick={() => {
+                      setOpenPicker(pickerOpen ? null : key);
+                      setShowAllFor(null);
+                    }}
+                  >
+                    {pickerOpen ? 'Close' : 'Add an activity'}
+                  </button>
+                </div>
+
+                {pickerOpen && (
+                  <div className="mt-4 border-t border-sand-200 pt-4">
+                    {ranked.length === 0 ? (
+                      <p className="text-[15px] text-ink-500">Nothing left to add for this day.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {ranked.slice(0, 8).map((a) => (
+                          <li key={a.id}>
+                            <button
+                              type="button"
+                              onClick={() => addActivity(day.day, a.id)}
+                              className="w-full rounded-xl border border-sand-300 bg-white p-3 text-left transition-colors hover:bg-sand-100"
+                            >
+                              <span className="flex items-baseline justify-between gap-3">
+                                <span className="font-semibold">{a.name}</span>
+                                <span className="shrink-0 text-sm font-semibold text-clay">
+                                  {priceLabel(a.indicativePrice)}
+                                </span>
+                              </span>
+                              <span className="mt-1 block text-[14px] leading-snug text-ink-700">
+                                {a.description}
+                              </span>
+                              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-300">
+                                <span>{a.city}</span>
+                                <span>About {a.durationHours} hours</span>
+                                {matchesStyles(a, form.styles) && (
+                                  <span className="rounded-full bg-sea-100 px-2 py-0.5 font-semibold text-sea">
+                                    Matches your style
+                                  </span>
+                                )}
+                                {a.audience === 'adult' && (
+                                  <span className="rounded-full bg-sand-100 px-2 py-0.5 font-semibold text-ink-500">
+                                    Adults only
+                                  </span>
+                                )}
+                                {a.intensity === 'high' && (
+                                  <span className="rounded-full bg-sand-100 px-2 py-0.5 font-semibold text-ink-500">
+                                    Physically demanding
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <button
+                      type="button"
+                      className="mt-3 text-sm font-semibold text-sea underline underline-offset-4"
+                      onClick={() => setShowAllFor(showAllFor === key ? null : key)}
+                    >
+                      {showAllFor === key
+                        ? `Show only ${day.city ?? 'nearby'} activities`
+                        : `Show everything in ${destination.name}`}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </Section>
+
+      {/* Practical info */}
+      <Section title="Worth knowing before you decide">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <InfoCard title="Visa">
+            <p>{destination.visa.type}</p>
+            <p className="mt-1 text-ink-500">{destination.visa.timeline}</p>
+            {destination.visa.feeInr > 0 && (
+              <p className="mt-1 text-ink-500">
+                {formatInr(destination.visa.feeInr)} per person, included in the package.
+              </p>
+            )}
+          </InfoCard>
+          <InfoCard title="Best months">
+            <p>{destination.bestMonthsSummary}</p>
+            <p className="mt-1 text-ink-500">{destination.flightTimeSummary}</p>
+          </InfoCard>
+          <InfoCard title="Daily spending on the ground">
+            <p>{destination.costSamplesNote}</p>
+          </InfoCard>
+          <InfoCard title="Typical prices there">
+            <ul className="space-y-1">
+              {destination.costSamples.slice(0, 4).map((c) => (
+                <li key={c.label} className="flex justify-between gap-3">
+                  <span>{c.label}</span>
+                  <span className="shrink-0 font-semibold">
+                    {formatInrRange(c.fromInr, c.toInr)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </InfoCard>
+        </div>
+      </Section>
+
+      {/* Estimate */}
+      {estimate && (
+        <Section title="Your estimate">
+          <div className="card p-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+              Estimated total for {estimate.travellers}{' '}
+              {estimate.travellers === 1 ? 'traveller' : 'travellers'}
+            </p>
+            <p className="mt-1 text-[2rem] font-semibold leading-tight tracking-tight">
+              {formatInrRange(estimate.total.low, estimate.total.high)}
+            </p>
+            <p className="mt-1 text-[15px] text-ink-700">
+              About {formatInrRange(estimate.perPerson.low, estimate.perPerson.high)} per person.
+            </p>
+            <dl className="mt-5 space-y-2 border-t border-sand-200 pt-4 text-[15px]">
+              <Row label="Land package, hotels and transfers">
+                {formatInrRange(estimate.land.low, estimate.land.high)}
+              </Row>
+              <Row label="Flights, estimated">
+                {formatInrRange(estimate.flights.low, estimate.flights.high)}
+              </Row>
+              <Row label={`Activities you selected (${chosenIds.length})`}>
+                {estimate.activityTotal > 0 ? formatInr(estimate.activityTotal) : 'None yet'}
+              </Row>
+            </dl>
+            <p className="mt-4 rounded-xl bg-sand-100 p-4 text-sm leading-relaxed text-ink-700">
+              This is an estimate, not a quote. Flights in particular move with the date. We
+              confirm real prices on your dates before anything is booked.
+            </p>
+          </div>
+        </Section>
       )}
 
-      {step === 6 && (
-        <Step title="Where should we send the quote?">
-          <Field label="Name">
+      {/* Budget */}
+      <Section
+        title="What budget are you working with?"
+        subtitle="Per person, including flights. It helps us pitch hotels at the right level."
+      >
+        <div className="grid gap-3">
+          {BUDGET_BANDS.map((band) => (
+            <Choice
+              key={band}
+              selected={form.budgetBand === band}
+              onClick={() => update({ budgetBand: band })}
+              title={band === 'Not sure yet' ? band : `₹${band}`}
+            />
+          ))}
+        </div>
+      </Section>
+
+      {/* Contact */}
+      <div ref={contactRef}>
+        <Section title="Where should we send the quote?">
+          <label className="block">
+            <span className="text-sm font-semibold">Name</span>
             <input
-              className="input"
+              className="input mt-2"
               value={form.name}
               autoComplete="name"
-              onChange={(e) => set('name', e.target.value)}
+              onChange={(e) => update({ name: e.target.value })}
             />
-          </Field>
-          <Field label="WhatsApp number" hint="We will call or message this number.">
+          </label>
+          <label className="mt-4 block">
+            <span className="text-sm font-semibold">WhatsApp number</span>
             <input
-              className="input"
+              className="input mt-2"
               type="tel"
               inputMode="numeric"
               autoComplete="tel"
               placeholder="9876543210"
               value={form.phone}
-              onChange={(e) => set('phone', e.target.value)}
+              onChange={(e) => update({ phone: e.target.value })}
             />
-          </Field>
-          <Field label="Email" hint="Optional.">
+          </label>
+          <label className="mt-4 block">
+            <span className="text-sm font-semibold">Email</span>
+            <span className="ml-2 text-sm text-ink-500">Optional</span>
             <input
-              className="input"
+              className="input mt-2"
               type="email"
               autoComplete="email"
               value={form.email}
-              onChange={(e) => set('email', e.target.value)}
+              onChange={(e) => update({ email: e.target.value })}
             />
-          </Field>
-          <Field label="Anything else we should know" hint="Optional.">
+          </label>
+          <label className="mt-4 block">
+            <span className="text-sm font-semibold">Anything else we should know</span>
+            <span className="ml-2 text-sm text-ink-500">Optional</span>
             <textarea
-              className="input min-h-24 py-3"
+              className="input mt-2 min-h-24 py-3"
               rows={3}
+              placeholder="Occasion, dietary needs, mobility, hotel preference, anything at all."
               value={form.notes}
-              onChange={(e) => set('notes', e.target.value)}
+              onChange={(e) => update({ notes: e.target.value })}
             />
-          </Field>
-          {phoneError && (
-            <p className="mt-2 text-sm font-medium text-clay">{phoneError}</p>
-          )}
-        </Step>
-      )}
+          </label>
 
-      {estimate && step > 2 && step < 6 && (
-        <p className="mt-6 rounded-xl bg-sand-100 p-4 text-sm leading-relaxed text-ink-700">
-          Running estimate for {estimate.travellers}{' '}
-          {estimate.travellers === 1 ? 'traveller' : 'travellers'}:{' '}
-          <strong className="font-semibold">
-            {formatInrRange(estimate.total.low, estimate.total.high)}
-          </strong>{' '}
-          in total, including flights.
-        </p>
-      )}
+          {error && <p className="mt-3 text-sm font-medium text-clay">{error}</p>}
 
-      <div className="mt-8 flex gap-3">
-        {step > 1 && (
-          <button type="button" className="btn-ghost flex-1" onClick={() => setStep(step - 1)}>
-            Back
-          </button>
-        )}
-        {step < TOTAL_STEPS ? (
           <button
             type="button"
-            className="btn-primary flex-1 disabled:opacity-40"
-            disabled={!canAdvance}
-            onClick={() => setStep(step + 1)}
-          >
-            Continue
-          </button>
-        ) : (
-          <button
-            type="button"
-            className="btn-primary flex-1 disabled:opacity-40"
+            className="btn-primary mt-6 w-full disabled:opacity-40"
             disabled={submitting}
             onClick={handleSubmit}
           >
-            {submitting ? 'Sending' : 'See my estimate'}
+            {submitting ? 'Sending' : 'Send my requirements'}
           </button>
-        )}
+          <p className="mt-3 text-center text-sm text-ink-500">{site.quotePromise}</p>
+        </Section>
       </div>
 
-      <p className="mt-6 text-center text-sm text-ink-500">
-        Would rather just talk?{' '}
-        <a
-          className="font-semibold text-sea underline underline-offset-4"
-          href={whatsappLink('Hello, I would like to plan a trip.')}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Message on WhatsApp
-        </a>
-      </p>
-    </div>
-  );
-}
-
-function Result({
-  result,
-  form,
-  estimate,
-  destinationName,
-  brochure,
-  monthLabel,
-}: {
-  result: SubmitResult;
-  form: FormState;
-  estimate: ReturnType<typeof estimateTrip> | null;
-  destinationName: string;
-  brochure: string;
-  monthLabel: string;
-}) {
-  const summary = [
-    `Hello, I just sent an enquiry on the website.`,
-    `Name: ${form.name}`,
-    `Destination: ${destinationName}`,
-    `Travel: ${monthLabel}${form.datesFlexible ? ' (flexible)' : ''}, ${form.nights} nights`,
-    `Travellers: ${form.adults} adults, ${form.children} children`,
-    estimate
-      ? `Estimate shown: ${formatInrRange(estimate.total.low, estimate.total.high)}`
-      : '',
-  ]
-    .filter(Boolean)
-    .join('\n');
-
-  return (
-    <div className="wrap max-w-2xl py-10">
-      <p className="eyebrow">Your estimate</p>
-      <h1 className="mt-3 text-[1.9rem] leading-tight sm:text-4xl">
-        {destinationName}, {monthLabel}
-      </h1>
-
+      {/* Sticky summary */}
       {estimate && (
-        <div className="card mt-7 p-6">
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">
-            Estimated total for {estimate.travellers}{' '}
-            {estimate.travellers === 1 ? 'traveller' : 'travellers'}
-          </p>
-          <p className="mt-2 text-[2.1rem] font-semibold leading-tight tracking-tight">
-            {formatInrRange(estimate.total.low, estimate.total.high)}
-          </p>
-          <p className="mt-1 text-[15px] text-ink-700">
-            About {formatInrRange(estimate.perPerson.low, estimate.perPerson.high)} per person.
-          </p>
-
-          <dl className="mt-6 space-y-2 border-t border-sand-200 pt-5 text-[15px]">
-            <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-ink-700">Land package</dt>
-              <dd className="font-semibold">
-                {formatInrRange(estimate.land.low, estimate.land.high)}
-              </dd>
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-sand-200 bg-white/95 backdrop-blur">
+          <div className="wrap flex max-w-3xl items-center justify-between gap-4 py-3">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">
+                {formatInrRange(estimate.total.low, estimate.total.high)}
+              </p>
+              <p className="truncate text-xs text-ink-500">
+                {estimate.travellers} travelling, {chosenIds.length} activities, estimated
+              </p>
             </div>
-            <div className="flex items-baseline justify-between gap-3">
-              <dt className="text-ink-700">Flights, estimated</dt>
-              <dd className="font-semibold">
-                {formatInrRange(estimate.flights.low, estimate.flights.high)}
-              </dd>
-            </div>
-            {estimate.activityTotal > 0 && (
-              <div className="flex items-baseline justify-between gap-3">
-                <dt className="text-ink-700">Activities selected, included above</dt>
-                <dd className="font-semibold">{formatInr(estimate.activityTotal)}</dd>
-              </div>
-            )}
-          </dl>
-
-          <p className="mt-5 rounded-xl bg-sand-100 p-4 text-sm leading-relaxed text-ink-700">
-            This is an estimate, not a quote. It is based on {estimate.season.label} season
-            rates for {monthLabel} and a standard four star hotel on twin sharing. The final
-            price depends on your exact dates and on availability when we book.
-          </p>
+            <button
+              type="button"
+              className="btn-primary h-11 min-h-0 shrink-0 px-5 text-sm"
+              onClick={() => contactRef.current?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              Send it
+            </button>
+          </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        <a
-          href={whatsappLink(summary)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="btn-wa"
-        >
-          <WhatsAppGlyph />
-          Send this on WhatsApp
-        </a>
-        {brochure && (
-          <a href={asset(brochure)} download className="btn-ghost">
-            Download the {destinationName} guide
-          </a>
-        )}
-      </div>
+function priceLabel(price: number) {
+  return price === 0 ? 'No ticket cost' : formatInr(price);
+}
 
-      <div className="mt-8 rounded-xl border border-sand-200 bg-white p-5">
-        <h2 className="text-lg">What happens next</h2>
-        <p className="mt-2 text-[15px] leading-relaxed text-ink-700">
-          {result.status === 'sent'
-            ? `We have your details. ${site.quotePromise}`
-            : `Your estimate is shown above. To make sure we have your details, send them across on WhatsApp using the button above. ${site.quotePromise}`}
-        </p>
-        {/* Diagnostics are for the owner during development, never for a customer. */}
-        {result.status !== 'sent' && process.env.NODE_ENV === 'development' && (
-          <p className="mt-3 text-sm text-ink-300">
-            {result.status === 'not-configured'
-              ? 'Development note: NEXT_PUBLIC_APPS_SCRIPT_URL is not set, so this enquiry was not written to the sheet.'
-              : `Development note: delivery failed (${result.message}).`}
-          </p>
-        )}
-      </div>
-
-      <p className="mt-8 text-center text-sm text-ink-500">
-        <Link className="font-semibold text-sea underline underline-offset-4" href="/">
-          Back to the home page
-        </Link>
+function Sent({
+  result,
+  name,
+  destinationName,
+  brochure,
+  estimate,
+}: {
+  result: SubmitResult;
+  name: string;
+  destinationName: string;
+  brochure: string;
+  estimate: ReturnType<typeof estimateTrip> | null;
+}) {
+  return (
+    <div className="wrap max-w-2xl py-16">
+      <p className="eyebrow">Received</p>
+      <h1 className="mt-3 text-[1.9rem] leading-tight sm:text-4xl">
+        Thank you{name ? `, ${name.split(' ')[0]}` : ''}.
+      </h1>
+      <p className="mt-4 text-[17px] leading-relaxed text-ink-700">
+        We have your {destinationName} plan. {site.quotePromise} We will come back with real
+        prices on your dates, and we will flag anything in the itinerary we would change.
       </p>
+      {estimate && (
+        <p className="mt-4 rounded-xl bg-sand-100 p-4 text-[15px] leading-relaxed text-ink-700">
+          The estimate you saw was{' '}
+          <strong className="font-semibold">
+            {formatInrRange(estimate.total.low, estimate.total.high)}
+          </strong>{' '}
+          for {estimate.travellers}{' '}
+          {estimate.travellers === 1 ? 'traveller' : 'travellers'}, including flights.
+        </p>
+      )}
+      {brochure && (
+        <a href={asset(brochure)} download className="btn-ghost mt-6 w-full sm:w-auto">
+          Download the {destinationName} guide
+        </a>
+      )}
+      {result.status !== 'sent' && process.env.NODE_ENV === 'development' && (
+        <p className="mt-6 text-sm text-ink-300">
+          {result.status === 'not-configured'
+            ? 'Development note: NEXT_PUBLIC_APPS_SCRIPT_URL is not set, so this was not written to the sheet.'
+            : `Development note: delivery failed (${result.message}).`}
+        </p>
+      )}
     </div>
   );
 }
 
-function Progress({ step }: { step: number }) {
-  return (
-    <div className="mb-8">
-      <div className="flex items-center justify-between text-sm text-ink-500">
-        <span>
-          Step {step} of {TOTAL_STEPS}
-        </span>
-        <span>{Math.round((step / TOTAL_STEPS) * 100)} percent</span>
-      </div>
-      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-sand-200">
-        <div
-          className="h-full rounded-full bg-clay transition-all duration-300"
-          style={{ width: `${(step / TOTAL_STEPS) * 100}%` }}
-        />
-      </div>
-    </div>
-  );
-}
+/* ---------- small pieces ---------- */
 
-function Step({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <h1 className="text-[1.6rem] leading-tight sm:text-3xl">{title}</h1>
-      <div className="mt-6">{children}</div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  hint,
-  className = '',
+function Section({
+  title,
+  subtitle,
   children,
 }: {
-  label: string;
-  hint?: string;
-  className?: string;
+  title: string;
+  subtitle?: string;
   children: React.ReactNode;
 }) {
   return (
-    <label className={`block ${className}`}>
-      <span className="text-sm font-semibold">{label}</span>
-      {hint && <span className="mt-0.5 block text-sm text-ink-500">{hint}</span>}
+    <section className="mt-10 border-t border-sand-200 pt-8">
+      <h2 className="text-xl sm:text-2xl">{title}</h2>
+      {subtitle && (
+        <p className="mt-2 text-[15px] leading-relaxed text-ink-700">{subtitle}</p>
+      )}
+      <div className="mt-5">{children}</div>
+    </section>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-ink-700">{label}</dt>
+      <dd className="shrink-0 font-semibold">{children}</dd>
+    </div>
+  );
+}
+
+function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-sand-200 bg-white p-4 text-[15px] leading-relaxed text-ink-700">
+      <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-500">{title}</h3>
       <div className="mt-2">{children}</div>
-    </label>
+    </div>
   );
 }
 
@@ -586,11 +830,13 @@ function Choice({
   onClick,
   title,
   subtitle,
+  trailing,
 }: {
   selected: boolean;
   onClick: () => void;
   title: string;
   subtitle?: string;
+  trailing?: string;
 }) {
   return (
     <button
@@ -598,11 +844,18 @@ function Choice({
       onClick={onClick}
       aria-pressed={selected}
       className={`w-full rounded-xl border p-4 text-left transition-colors ${
-        selected ? 'border-clay bg-clay-100 ring-1 ring-clay' : 'border-sand-300 bg-white hover:bg-sand-100'
+        selected
+          ? 'border-clay bg-clay-100 ring-1 ring-clay'
+          : 'border-sand-300 bg-white hover:bg-sand-100'
       }`}
     >
-      <span className="block font-semibold">{title}</span>
-      {subtitle && <span className="mt-1 block text-[14px] leading-snug text-ink-700">{subtitle}</span>}
+      <span className="flex items-baseline justify-between gap-3">
+        <span className="font-semibold">{title}</span>
+        {trailing && <span className="shrink-0 text-sm text-ink-500">{trailing}</span>}
+      </span>
+      {subtitle && (
+        <span className="mt-1 block text-[14px] leading-snug text-ink-700">{subtitle}</span>
+      )}
     </button>
   );
 }
@@ -621,7 +874,7 @@ function Counter({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="mb-4 flex items-center justify-between gap-4 rounded-xl border border-sand-300 bg-white p-4">
+    <div className="mb-3 flex items-center justify-between gap-4 rounded-xl border border-sand-300 bg-white p-4">
       <div>
         <p className="font-semibold">{label}</p>
         <p className="text-sm text-ink-500">{hint}</p>
@@ -646,61 +899,6 @@ function Counter({
         >
           +
         </button>
-      </div>
-    </div>
-  );
-}
-
-function ActivityGroup({
-  heading,
-  items,
-  selected,
-  onToggle,
-}: {
-  heading: string;
-  items: { id: string; name: string; description: string; indicativePrice: number }[];
-  selected: string[];
-  onToggle: (id: string) => void;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <div className="mb-6">
-      <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-500">{heading}</h2>
-      <div className="mt-3 grid gap-2.5">
-        {items.map((a) => {
-          const on = selected.includes(a.id);
-          return (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => onToggle(a.id)}
-              aria-pressed={on}
-              className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
-                on ? 'border-clay bg-clay-100 ring-1 ring-clay' : 'border-sand-300 bg-white hover:bg-sand-100'
-              }`}
-            >
-              <span
-                aria-hidden
-                className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border ${
-                  on ? 'border-clay bg-clay text-white' : 'border-sand-300 bg-white'
-                }`}
-              >
-                {on ? '✓' : ''}
-              </span>
-              <span className="flex-1">
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="font-semibold">{a.name}</span>
-                  <span className="shrink-0 text-sm font-semibold text-clay">
-                    {formatInr(a.indicativePrice)}
-                  </span>
-                </span>
-                <span className="mt-1 block text-[14px] leading-snug text-ink-700">
-                  {a.description}
-                </span>
-              </span>
-            </button>
-          );
-        })}
       </div>
     </div>
   );

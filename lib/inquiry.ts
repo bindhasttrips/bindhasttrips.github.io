@@ -11,12 +11,23 @@ export interface InquiryPayload {
   phone: string;
   email: string;
   destination: string;
+  tier: string;
   travelMonth: string;
   datesFlexible: boolean;
   nights: number;
   adults: number;
   children: number;
+  seniors: number;
+  /** The trip style chips. The fastest read on who this group is. */
+  styles: string[];
   activities: string[];
+  /** Activities they added beyond the suggestion. Signals real intent. */
+  activitiesAdded: string[];
+  /** Suggested activities they took out. Signals what to avoid pitching. */
+  suggestionsRemoved: string[];
+  /** Day by day, as one readable line. */
+  itinerary: string;
+  activityTotal: number;
   budgetBand: string;
   estimateLow: number;
   estimateHigh: number;

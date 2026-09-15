@@ -53,12 +53,28 @@ should get an email, and a row should appear in the `Inquiries` tab.
   deployment and set Version to **New version**. Editing the code alone does not
   change what the live URL runs.
 
+## If you already deployed an earlier version
+
+The column list changed. Delete the `Inquiries` tab and let the script recreate
+it on the next submission, then redeploy with **Deploy > Manage deployments >
+edit > Version: New version**.
+
 ## What the sheet gives you
 
-One row per enquiry: name, phone, email, destination, travel month, whether
-dates are flexible, nights, adults, children, the activities they picked, their
-budget band, and the estimate they were shown. That is the demand data, in a
-form you can sort and filter.
+One row per enquiry:
+
+- Who: name, phone, email
+- Trip: destination, package, travel month, flexible or fixed, nights
+- Party: adults, children, seniors, total
+- `tripStyles`: nightlife, family, relaxed, adventure, culture, food, shopping,
+  sightseeing. The fastest read on who you are about to call.
+- `activities`: everything they chose
+- `activitiesAdded`: what they added beyond our suggestion, which is the
+  strongest signal of what they actually want
+- `suggestionsRemoved`: what they took out, so you know what not to pitch
+- `itinerary`: the whole plan day by day in one cell
+- Money: budget band, activity total, and the estimate range they saw
+- `notes`: their free text
 
 Anything you add to the right of `ownerNotes` is private. The site never reads
 this sheet, so supplier costs, margin and personal details are safe there.

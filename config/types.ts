@@ -1,23 +1,54 @@
 /**
- * The destination system is data-driven on purpose.
- * Adding Malaysia / Singapore / Vietnam later = add one object to
- * config/destinations.ts. No new pages, no new components.
+ * The destination system is data driven. Adding a destination means adding one
+ * object to config/destinations.ts. No new pages, no new components.
  */
 
 export type Audience = 'adult' | 'kids' | 'both';
 export type SeasonLabel = 'peak' | 'shoulder' | 'off';
 
+/** Drives which activities are suggested. The whole customisation pitch. */
+export type TripStyle =
+  | 'nightlife'
+  | 'family'
+  | 'relaxed'
+  | 'adventure'
+  | 'culture'
+  | 'food'
+  | 'shopping'
+  | 'sightseeing';
+
+export const TRIP_STYLES: { id: TripStyle; label: string; hint: string }[] = [
+  { id: 'sightseeing', label: 'Sightseeing', hint: 'The landmarks and the views' },
+  { id: 'family', label: 'Family', hint: 'Works with children' },
+  { id: 'relaxed', label: 'Relaxed', hint: 'Beaches, spas, slow days' },
+  { id: 'nightlife', label: 'Nightlife', hint: 'Bars, clubs, shows' },
+  { id: 'adventure', label: 'Adventure', hint: 'Water sports, heights, activity' },
+  { id: 'culture', label: 'Culture', hint: 'Temples, museums, old towns' },
+  { id: 'food', label: 'Food', hint: 'Markets, tours, cooking' },
+  { id: 'shopping', label: 'Shopping', hint: 'Malls, souks, markets' },
+];
+
+/** Rough physical demand. Used to steer suggestions, never to block a choice. */
+export type Intensity = 'low' | 'moderate' | 'high';
+
 export interface Activity {
   id: string;
   name: string;
   description: string;
-  /** Indicative price per ADULT, in INR. Shown to the customer as "approx". */
+  /** Per adult, in INR. Zero means there is no ticket cost. */
   indicativePrice: number;
-  /** Per-child price in INR. Falls back to indicativePrice when absent. */
+  /** Per child. Falls back to indicativePrice when absent. */
   childPrice?: number;
   audience: Audience;
   durationHours: number;
-  /** Optional caveat, e.g. "seasonal, Nov-May only". */
+  tags: TripStyle[];
+  /** City or area within the destination. Drives grouping in the builder. */
+  city: string;
+  intensity: Intensity;
+  /** Optional operator or booking page. Left empty until real URLs are supplied. */
+  infoUrl?: string;
+  /** Optional video. Same rule: only real URLs. */
+  videoUrl?: string;
   note?: string;
 }
 
@@ -25,6 +56,9 @@ export interface ItineraryDay {
   day: number;
   title: string;
   detail: string;
+  /** Pre-selected suggestions for this day. Every one of them is removable. */
+  suggestedActivityIds?: string[];
+  city?: string;
 }
 
 export interface PackageTier {
@@ -32,41 +66,34 @@ export interface PackageTier {
   name: string;
   days: number;
   nights: number;
-  /** Headline "from" price, per person, LAND ONLY. Flights are never in this number. */
+  /** Per person, land only. Flights are never inside this number. */
   fromPricePerPerson: number;
   blurb: string;
   highlights: string[];
   itinerary: ItineraryDay[];
-  /** Marks the tier we push hardest. Exactly one per destination. */
   recommended?: boolean;
 }
 
 export interface Season {
   label: SeasonLabel;
-  /** 1 = January ... 12 = December */
+  /** 1 = January through 12 = December. */
   months: number[];
   multiplier: number;
-  /** Shown on the destination page, e.g. "Perfect weather, highest prices". */
   note: string;
 }
 
 export interface VisaInfo {
   required: boolean;
-  /** e.g. "UAE tourist e-Visa (30 days)" */
   type: string;
-  /** e.g. "3-5 working days" */
   timeline: string;
-  /** Per person, in INR. 0 when no visa is needed. */
   feeInr: number;
   documents: string[];
-  /** Plain-language reassurance about who does what. */
   handledByUs: string;
   caveat?: string;
 }
 
 export interface CostSample {
   label: string;
-  /** Rough INR equivalent. Displayed as a range when `toInr` is set. */
   fromInr: number;
   toInr?: number;
 }
@@ -74,11 +101,10 @@ export interface CostSample {
 export interface DestinationPricing {
   /** Per person per night, twin sharing, land only, in a shoulder month. */
   baseLandPerPersonPerNight: number;
-  /** Children are charged this fraction of the adult land rate. */
   childLandFactor: number;
-  /** One-off per-person land costs (visa handling, arrival transfers, insurance). */
+  /** Visa handling, arrival transfers, insurance. Per head. */
   fixedPerPersonInr: number;
-  /** Indicative return economy airfare from a metro. NEVER folded into the headline. */
+  /** Return economy airfare. Never folded into the land number. */
   indicativeFlight: { low: number; high: number; note: string };
   seasons: Season[];
 }
@@ -87,15 +113,15 @@ export interface Destination {
   slug: string;
   name: string;
   country: string;
-  /** Shown on cards and as the page subtitle. One line, no marketing froth. */
   tagline: string;
   heroImage: string;
   heroAlt: string;
   cardImage: string;
-  /** Two or three sentences. Who this destination suits. */
   summary: string;
   bestMonthsSummary: string;
   flightTimeSummary: string;
+  /** Ordered, for grouping the activity catalogue. */
+  cities: string[];
   currency: { code: string; symbol: string; approxInrPerUnit: number };
   visa: VisaInfo;
   costSamples: CostSample[];
@@ -105,8 +131,6 @@ export interface Destination {
   included: string[];
   notIncluded: string[];
   pricing: DestinationPricing;
-  /** Path under /public. Served on inquiry submit, ungated. */
   brochure: string;
-  /** Flip to true to launch a destination. Malaysia/Singapore/Vietnam sit at false. */
   enabled: boolean;
 }

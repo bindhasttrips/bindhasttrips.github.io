@@ -111,3 +111,26 @@ test('degenerate inputs are clamped rather than producing nonsense', () => {
   assert.equal(e.travellers, 1);
   assert.ok(e.land.low > 0);
 });
+
+test('seniors are priced as adults but counted separately', () => {
+  const twoAdults = estimateTrip({ ...base, adults: 2, children: 0 });
+  const adultPlusSenior = estimateTrip({ ...base, adults: 1, children: 0, seniors: 1 });
+  assert.equal(adultPlusSenior.travellers, 2);
+  assert.equal(adultPlusSenior.fullFareTravellers, 2);
+  assert.equal(adultPlusSenior.total.low, twoAdults.total.low);
+  assert.equal(adultPlusSenior.total.high, twoAdults.total.high);
+});
+
+test('a solo senior still prices as one traveller', () => {
+  const e = estimateTrip({ ...base, adults: 0, children: 0, seniors: 1 });
+  assert.equal(e.travellers, 1);
+  assert.equal(e.fullFareTravellers, 1);
+  assert.ok(e.total.low > 0);
+});
+
+test('free activities add nothing to the total', () => {
+  const withFree = estimateTrip({ ...base, activityIds: ['la-mer-beach'] });
+  const without = estimateTrip({ ...base, activityIds: [] });
+  assert.equal(withFree.activityTotal, 0);
+  assert.equal(withFree.total.low, without.total.low);
+});
