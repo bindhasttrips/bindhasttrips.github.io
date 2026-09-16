@@ -38,3 +38,33 @@ test('days are nights plus one', () => {
   assert.equal(daysFromNights(4), 5);
   assert.equal(daysFromNights(0), 2);
 });
+
+import { recommendFor } from './suggest.ts';
+import { getDestination } from '../config/destinations.ts';
+
+test('a short stop still gets at least two suggestions', () => {
+  const uae = getDestination('uae')!;
+  const dubai = uae.activities.filter((a) => a.city === 'Dubai');
+  const party = { adults: 2, children: 1, seniors: 0, groupType: 'family' as const };
+  for (const nights of [1, 2, 3]) {
+    const picks = recommendFor(dubai, ['family'], party, nights);
+    assert.ok(picks.length >= 2, `${nights} nights produced ${picks.length}`);
+  }
+});
+
+test('a longer stop gets more suggestions than a short one', () => {
+  const uae = getDestination('uae')!;
+  const dubai = uae.activities.filter((a) => a.city === 'Dubai');
+  const party = { adults: 2, children: 0, seniors: 0, groupType: 'couple' as const };
+  const short = recommendFor(dubai, ['sightseeing'], party, 2);
+  const long = recommendFor(dubai, ['sightseeing'], party, 9);
+  assert.ok(long.length > short.length);
+});
+
+test('suggestions never exceed what the city actually offers', () => {
+  const uae = getDestination('uae')!;
+  const abuDhabi = uae.activities.filter((a) => a.city === 'Abu Dhabi');
+  const party = { adults: 2, children: 0, seniors: 2, groupType: 'seniors' as const };
+  const picks = recommendFor(abuDhabi, ['culture'], party, 30);
+  assert.ok(picks.length <= abuDhabi.length);
+});

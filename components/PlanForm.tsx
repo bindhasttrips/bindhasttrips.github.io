@@ -982,7 +982,9 @@ function ActivityStep({
               onClick={() => onAddRecommended(ourPick)}
               className="btn-ghost mt-4 w-full text-sm"
             >
-              Add the {ourPick.length} we would pick for {describeGroup(party)}
+              {ourPick.length === 1
+                ? `Add the one we would pick for ${describeGroup(party)}`
+                : `Add the ${ourPick.length} we would pick for ${describeGroup(party)}`}
             </button>
           )}
 

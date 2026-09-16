@@ -86,8 +86,9 @@ export function recommendFor(
   party: Party,
   nights: number,
 ): Activity[] {
-  // Roughly one significant activity per day, leaving space to do nothing.
-  const target = Math.max(1, Math.min(activities.length, Math.round(nights * 0.7)));
+  // Roughly one significant thing per day, leaving room to do nothing, but
+  // never fewer than two or a two night stop looks empty.
+  const target = Math.min(activities.length, Math.max(2, Math.round(nights * 0.8)));
   const ranked = sortForParty(activities, styles, party);
   const chosen: Activity[] = [];
   let hours = 0;
