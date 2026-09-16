@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "typecheck": "tsc --noEmit",
-    "test": "node --test lib/estimate.test.ts"
+    "test": "node --test lib/estimate.test.ts",
+    "generate:form": "node scripts/generate-form.mjs"
   },
   "dependencies": {
     "next": "^15.5.0",
