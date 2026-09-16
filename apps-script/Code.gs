@@ -16,14 +16,13 @@ var INQUIRY_SHEET = 'Inquiries';
 var NOTIFY_EMAIL = 'deepghuge09@gmail.com'; // TODO: confirm where enquiry alerts should go
 
 var INQUIRY_HEADERS = [
-  'timestamp', 'name', 'phone', 'email',
-  'destination', 'package', 'travelMonth', 'datesFlexible', 'nights',
-  'adults', 'children', 'seniors', 'totalTravellers',
-  'tripStyles',
-  'activities', 'activitiesAdded', 'suggestionsRemoved', 'activityCount', 'activityTotal',
-  'itinerary',
-  'budgetBand', 'estimateLow', 'estimateHigh',
-  'notes', 'source', 'status', 'ownerNotes'
+  'timestamp', 'name', 'phone', 'email', 'status', 'ownerNotes',
+  'destination', 'travelMonth', 'datesFlexible', 'nights', 'days',
+  'adults', 'children', 'childAges', 'seniors', 'totalTravellers',
+  'cities', 'tripStyles', 'stayType', 'nightlyBudget', 'statedBudget',
+  'activityCount', 'activities', 'activityTotal',
+  'itinerary', 'estimateLow', 'estimateHigh',
+  'notes', 'source'
 ];
 
 /** POST from the website enquiry form. */
@@ -47,35 +46,36 @@ function buildInquiryRow(b) {
   var adults = toInt(b.adults, 0, 40);
   var children = toInt(b.children, 0, 40);
   var seniors = toInt(b.seniors, 0, 40);
-  var activities = list(b.activities);
   return [
     new Date(),
     clean(b.name, 120),
     clean(b.phone, 20),
     clean(b.email, 160),
+    'new',
+    '',
     clean(b.destination, 60),
-    clean(b.tier, 80),
     clean(b.travelMonth, 40),
     b.datesFlexible ? 'flexible' : 'fixed',
     toInt(b.nights, 0, 60),
+    toInt(b.days, 0, 60),
     adults,
     children,
+    clean(b.childAges, 80),
     seniors,
     adults + children + seniors,
+    list(b.cities),
     list(b.styles),
-    activities,
-    list(b.activitiesAdded),
-    list(b.suggestionsRemoved),
+    clean(b.stayType, 60),
+    clean(b.nightlyBudget, 80),
+    clean(b.budgetBand, 80),
     Array.isArray(b.activities) ? b.activities.length : 0,
+    list(b.activities),
     toInt(b.activityTotal, 0, 100000000),
     clean(b.itinerary, 2000),
-    clean(b.budgetBand, 80),
     toInt(b.estimateLow, 0, 100000000),
     toInt(b.estimateHigh, 0, 100000000),
     clean(b.notes, 1000),
-    clean(b.source, 300),
-    'new',
-    ''
+    clean(b.source, 300)
   ];
 }
 
@@ -92,19 +92,20 @@ function notify(b) {
     'Phone: ' + clean(b.phone, 20),
     'Email: ' + clean(b.email, 160),
     '',
-    'Destination: ' + clean(b.destination, 60) + ', ' + clean(b.tier, 80),
+    'Destination: ' + clean(b.destination, 60) + ', ' + clean(b.cities ? list(b.cities) : '', 200),
     'Travel: ' + clean(b.travelMonth, 40) + (b.datesFlexible ? ' (flexible)' : ' (fixed)'),
-    'Nights: ' + toInt(b.nights, 0, 60),
+    'Length: ' + toInt(b.days, 0, 60) + ' days, ' + toInt(b.nights, 0, 60) + ' nights',
     'Travellers: ' + toInt(b.adults, 0, 40) + ' adults, ' +
-      toInt(b.children, 0, 40) + ' children, ' + toInt(b.seniors, 0, 40) + ' seniors',
+      toInt(b.children, 0, 40) + ' children, ' + toInt(b.seniors, 0, 40) + ' seniors' +
+      (b.childAges ? ' (ages ' + clean(b.childAges, 80) + ')' : ''),
     'Trip style: ' + list(b.styles),
-    'Budget band: ' + clean(b.budgetBand, 80),
+    'Stay: ' + clean(b.stayType, 60) + ', ' + clean(b.nightlyBudget, 80),
+    'Stated budget: ' + clean(b.budgetBand, 80),
     'Estimate shown: ' + toInt(b.estimateLow, 0, 100000000) + ' to ' + toInt(b.estimateHigh, 0, 100000000),
     '',
     'Itinerary: ' + clean(b.itinerary, 2000),
     '',
-    'Added beyond the suggestion: ' + list(b.activitiesAdded),
-    'Suggestions they removed: ' + list(b.suggestionsRemoved),
+    'Activities (' + (Array.isArray(b.activities) ? b.activities.length : 0) + '): ' + list(b.activities),
     '',
     'Notes: ' + clean(b.notes, 1000)
   ];

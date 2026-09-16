@@ -1,46 +1,42 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { liveDestinations, getDestination, getTier } from '@/config/destinations';
 import { TRIP_STYLES, type Activity, type TripStyle } from '@/config/types';
-import { site } from '@/config/site';
+import { STAY_TYPES, NIGHTLY_BUDGETS, TOTAL_BUDGETS, stayById } from '@/config/stay';
+import { site, SHOW_ACTIVITY_PRICES } from '@/config/site';
 import { estimateTrip } from '@/lib/estimate';
+import { allocateNights, daysFromNights } from '@/lib/itinerary';
 import { formatInr, formatInrRange } from '@/lib/format';
 import { asset } from '@/lib/asset';
 import { sortForParty, matchesStyles, type Party } from '@/lib/suggest';
 import { submitInquiry, normaliseIndianMobile, type SubmitResult } from '@/lib/inquiry';
 
-const STORAGE_KEY = 'bindhast-plan-v2';
+const STORAGE_KEY = 'bindhast-plan-v3';
+const MIN_NIGHTS = 2;
+const MAX_NIGHTS = 21;
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const BUDGET_BANDS = [
-  'Under 60,000 per person',
-  '60,000 to 1,00,000 per person',
-  '1,00,000 to 1,50,000 per person',
-  'Over 1,50,000 per person',
-  'Not sure yet',
-];
-
-/** A day that is fuller than this gets a gentle warning, never a block. */
-const LONG_DAY_HOURS = 11;
-
 interface FormState {
   destination: string;
-  tierId: string;
   travelMonth: number;
   travelYear: number;
   datesFlexible: boolean;
+  nights: number;
   adults: number;
   children: number;
+  childAges: string;
   seniors: number;
+  cities: string[];
+  stayType: string;
+  nightlyBudget: string;
   styles: TripStyle[];
-  /** Day number to activity ids. This is the itinerary. */
-  dayPlan: Record<string, string[]>;
+  activities: string[];
   budgetBand: string;
   name: string;
   phone: string;
@@ -48,70 +44,70 @@ interface FormState {
   notes: string;
 }
 
-function defaultMonth() {
+type StepId =
+  | 'destination' | 'when' | 'length' | 'who' | 'cities'
+  | 'stay' | 'style' | 'budget' | 'review' | 'contact'
+  | `activities:${string}`;
+
+function initial(): FormState {
   const d = new Date();
   const next = new Date(d.getFullYear(), d.getMonth() + 2, 1);
-  return { month: next.getMonth() + 1, year: next.getFullYear() };
-}
-
-function planFromTier(destSlug: string, tierId: string): Record<string, string[]> {
-  const tier = getTier(destSlug, tierId);
-  const plan: Record<string, string[]> = {};
-  tier?.itinerary.forEach((d) => {
-    plan[String(d.day)] = [...(d.suggestedActivityIds ?? [])];
-  });
-  return plan;
+  return {
+    destination: '',
+    travelMonth: next.getMonth() + 1,
+    travelYear: next.getFullYear(),
+    datesFlexible: true,
+    nights: 5,
+    adults: 2,
+    children: 0,
+    childAges: '',
+    seniors: 0,
+    cities: [],
+    stayType: 'hotel4',
+    nightlyBudget: '',
+    styles: [],
+    activities: [],
+    budgetBand: '',
+    name: '',
+    phone: '',
+    email: '',
+    notes: '',
+  };
 }
 
 export default function PlanForm() {
   const params = useSearchParams();
   const [form, setForm] = useState<FormState | null>(null);
-  const [openPicker, setOpenPicker] = useState<string | null>(null);
-  const [showAllFor, setShowAllFor] = useState<string | null>(null);
+  const [stepIndex, setStepIndex] = useState(0);
+  const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
-  const [error, setError] = useState('');
-  const contactRef = useRef<HTMLDivElement>(null);
+  const [onlyRecommended, setOnlyRecommended] = useState(true);
 
-  // Restore a dropped session, then let the query string override destination
-  // and tier so a fresh link from WhatsApp always lands where it should.
   useEffect(() => {
     let saved: Partial<FormState> = {};
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) saved = JSON.parse(raw) as Partial<FormState>;
     } catch {
-      // Blocked storage. Carry on with a clean slate.
+      // Blocked storage. Start clean.
     }
-
+    const base = { ...initial(), ...saved };
     const qDest = getDestination(params.get('dest'))?.slug;
-    const destination = qDest || saved.destination || liveDestinations[0].slug;
+    if (qDest && qDest !== saved.destination) {
+      base.destination = qDest;
+      base.cities = [];
+      base.activities = [];
+    } else if (qDest) {
+      base.destination = qDest;
+    }
+    // A tier link only seeds the length. The customer still controls it.
     const qTier = params.get('tier');
-    const tierId =
-      getTier(destination, qTier)?.id ??
-      (saved.destination === destination ? saved.tierId : undefined) ??
-      getTier(destination, null)!.id;
-
-    const { month, year } = defaultMonth();
-    const sameTrip = saved.destination === destination && saved.tierId === tierId;
-
-    setForm({
-      destination,
-      tierId,
-      travelMonth: saved.travelMonth ?? month,
-      travelYear: saved.travelYear ?? year,
-      datesFlexible: saved.datesFlexible ?? true,
-      adults: saved.adults ?? 2,
-      children: saved.children ?? 0,
-      seniors: saved.seniors ?? 0,
-      styles: saved.styles ?? [],
-      dayPlan: sameTrip && saved.dayPlan ? saved.dayPlan : planFromTier(destination, tierId),
-      budgetBand: saved.budgetBand ?? '',
-      name: saved.name ?? '',
-      phone: saved.phone ?? '',
-      email: saved.email ?? '',
-      notes: saved.notes ?? '',
-    });
+    if (qDest && qTier) {
+      const tier = getTier(qDest, qTier);
+      if (tier) base.nights = tier.nights;
+    }
+    setForm(base);
   }, [params]);
 
   useEffect(() => {
@@ -119,15 +115,21 @@ export default function PlanForm() {
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
     } catch {
-      // Losing persistence is not worth breaking the page over.
+      // Not worth breaking the form over.
     }
   }, [form]);
 
   const destination = form ? getDestination(form.destination) : undefined;
-  const tier = form && destination ? getTier(form.destination, form.tierId) : undefined;
 
-  const chosenIds = useMemo(
-    () => (form ? Object.values(form.dayPlan).flat() : []),
+  const steps: StepId[] = useMemo(() => {
+    const s: StepId[] = ['destination', 'when', 'length', 'who', 'cities', 'stay', 'style'];
+    if (form) for (const c of form.cities) s.push(`activities:${c}` as StepId);
+    s.push('budget', 'review', 'contact');
+    return s;
+  }, [form]);
+
+  const nightsByCity = useMemo(
+    () => (form ? allocateNights(form.nights, form.cities) : []),
     [form],
   );
 
@@ -135,102 +137,95 @@ export default function PlanForm() {
     if (!form || !destination) return null;
     return estimateTrip({
       destination,
-      nights: tier?.nights ?? 4,
+      nights: form.nights,
       adults: form.adults,
       children: form.children,
       seniors: form.seniors,
-      activityIds: chosenIds,
+      stayMultiplier: stayById(form.stayType).multiplier,
+      activityIds: form.activities,
       travelMonth: form.travelMonth,
     });
-  }, [form, destination, tier, chosenIds]);
+  }, [form, destination]);
 
-  if (!form || !destination || !tier) return null;
+  if (!form) return null;
 
+  const step = steps[Math.min(stepIndex, steps.length - 1)];
   const party: Party = { adults: form.adults, children: form.children, seniors: form.seniors };
-  const season = estimate?.season;
 
-  function update(patch: Partial<FormState>) {
-    setForm((f) => (f ? { ...f, ...patch } : f));
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((f) => (f ? { ...f, [key]: value } : f));
+    setError('');
   }
 
-  function changeTrip(destSlug: string, tierId: string) {
-    update({
-      destination: destSlug,
-      tierId,
-      dayPlan: planFromTier(destSlug, tierId),
-    });
-    setOpenPicker(null);
+  function toggle<T>(list: T[], value: T): T[] {
+    return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
   }
 
-  function toggleStyle(style: TripStyle) {
-    update({
-      styles: form!.styles.includes(style)
-        ? form!.styles.filter((s) => s !== style)
-        : [...form!.styles, style],
-    });
+  function validate(): string {
+    if (step === 'destination' && !destination) return 'Pick a destination to continue.';
+    if (step === 'cities' && form!.cities.length === 0) return 'Pick at least one city.';
+    if (step === 'stay' && !form!.nightlyBudget) return 'Pick a nightly budget, or choose "Not sure".';
+    if (step === 'style' && form!.styles.length === 0) return 'Pick at least one, so we know what to suggest.';
+    if (step === 'budget' && !form!.budgetBand) return 'Pick a budget, or choose "Not sure yet".';
+    return '';
   }
 
-  function addActivity(day: number, id: string) {
-    const key = String(day);
-    const current = form!.dayPlan[key] ?? [];
-    if (current.includes(id)) return;
-    update({ dayPlan: { ...form!.dayPlan, [key]: [...current, id] } });
-  }
-
-  function removeActivity(day: number, id: string) {
-    const key = String(day);
-    update({
-      dayPlan: { ...form!.dayPlan, [key]: (form!.dayPlan[key] ?? []).filter((a) => a !== id) },
-    });
-  }
-
-  function activityById(id: string): Activity | undefined {
-    return destination!.activities.find((a) => a.id === id);
-  }
-
-  async function handleSubmit() {
-    const phone = normaliseIndianMobile(form!.phone);
-    if (!form!.name.trim()) {
-      setError('Please enter your name.');
-      return;
-    }
-    if (!phone) {
-      setError('Enter a 10 digit Indian mobile number.');
+  function next() {
+    const problem = validate();
+    if (problem) {
+      setError(problem);
       return;
     }
     setError('');
+    setOnlyRecommended(true);
+    setStepIndex((i) => Math.min(i + 1, steps.length - 1));
+    window.scrollTo({ top: 0 });
+  }
+
+  function back() {
+    setError('');
+    setStepIndex((i) => Math.max(i - 1, 0));
+    window.scrollTo({ top: 0 });
+  }
+
+  async function submit() {
+    const phone = normaliseIndianMobile(form!.phone);
+    if (!form!.name.trim()) return setError('Please enter your name.');
+    if (!phone) return setError('Enter a 10 digit Indian mobile number.');
+    setError('');
     setSubmitting(true);
 
-    const itineraryText = tier!.itinerary
-      .map((d) => {
-        const names = (form!.dayPlan[String(d.day)] ?? [])
-          .map((id) => activityById(id)?.name ?? id)
-          .join('; ');
-        return `Day ${d.day} (${d.city ?? ''}): ${names || 'nothing booked'}`;
-      })
-      .join(' | ');
-
-    const suggested = tier!.itinerary.flatMap((d) => d.suggestedActivityIds ?? []);
-    const removed = suggested.filter((id) => !chosenIds.includes(id));
-    const added = chosenIds.filter((id) => !suggested.includes(id));
+    const byCity = nightsByCity.map((c) => {
+      const names = form!.activities
+        .map((id) => destination!.activities.find((a) => a.id === id))
+        .filter((a): a is Activity => Boolean(a) && a!.city === c.city)
+        .map((a) => a.name);
+      return `${c.city}, ${c.nights} ${c.nights === 1 ? 'night' : 'nights'}: ${
+        names.length ? names.join('; ') : 'nothing chosen'
+      }`;
+    });
 
     const res = await submitInquiry({
       name: form!.name.trim(),
       phone,
       email: form!.email.trim(),
       destination: destination!.name,
-      tier: tier!.name,
       travelMonth: `${MONTH_NAMES[form!.travelMonth - 1]} ${form!.travelYear}`,
       datesFlexible: form!.datesFlexible,
-      nights: tier!.nights,
+      nights: form!.nights,
+      days: daysFromNights(form!.nights),
       adults: form!.adults,
       children: form!.children,
+      childAges: form!.childAges.trim(),
       seniors: form!.seniors,
+      cities: form!.cities,
+      stayType: stayById(form!.stayType).label,
+      nightlyBudget: form!.nightlyBudget,
       styles: form!.styles,
-      activities: chosenIds.map((id) => activityById(id)?.name ?? id),
-      activitiesAdded: added.map((id) => activityById(id)?.name ?? id),
-      suggestionsRemoved: removed.map((id) => activityById(id)?.name ?? id),
-      itinerary: itineraryText,
+      activities: form!.activities.map(
+        (id) => destination!.activities.find((a) => a.id === id)?.name ?? id,
+      ),
+      itinerary: byCity.join(' | '),
       activityTotal: estimate?.activityTotal ?? 0,
       budgetBand: form!.budgetBand,
       estimateLow: estimate?.total.low ?? 0,
@@ -245,360 +240,349 @@ export default function PlanForm() {
 
   if (result) {
     return (
-      <Sent
+      <Done
         result={result}
         name={form.name}
-        destinationName={destination.name}
-        brochure={destination.brochure}
+        destinationName={destination?.name ?? ''}
+        brochure={destination?.brochure ?? ''}
         estimate={estimate}
       />
     );
   }
 
+  const isActivityStep = step.startsWith('activities:');
+  const activityCity = isActivityStep ? step.slice('activities:'.length) : '';
+
   return (
-    <div className="wrap max-w-3xl pb-28 pt-8">
-      <header>
-        <p className="eyebrow">Plan your trip</p>
-        <h1 className="mt-2 text-[1.9rem] leading-tight sm:text-4xl">
-          Your {destination.name} itinerary
-        </h1>
-        <p className="mt-3 text-[16px] leading-relaxed text-ink-700">
-          We have filled in a suggested plan below. Change anything you like, remove what you
-          do not want, and leave days empty if you would rather decide later. Nothing here is
-          fixed.
-        </p>
-      </header>
+    <div className="wrap max-w-2xl pb-24 pt-6">
+      <Progress index={stepIndex} total={steps.length} />
 
-      {/* Destination and package */}
-      <Section title="Destination and length">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {liveDestinations.map((d) => (
-            <Choice
-              key={d.slug}
-              selected={form.destination === d.slug}
-              onClick={() => changeTrip(d.slug, getTier(d.slug, null)!.id)}
-              title={d.name}
-              subtitle={d.tagline}
-            />
-          ))}
-        </div>
-        <div className="mt-4 grid gap-3">
-          {destination.tiers.map((t) => (
-            <Choice
-              key={t.id}
-              selected={form.tierId === t.id}
-              onClick={() => changeTrip(destination.slug, t.id)}
-              title={`${t.name}, ${t.days} days`}
-              subtitle={t.blurb}
-              trailing={`from ${formatInr(t.fromPricePerPerson)}`}
-            />
-          ))}
-        </div>
-        <p className="mt-3 text-sm text-ink-500">
-          Changing the destination or package rebuilds the suggested itinerary below.
-        </p>
-      </Section>
-
-      {/* When */}
-      <Section title="When are you travelling?">
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="text-sm font-semibold">Month</span>
-            <select
-              className="input mt-2"
-              value={form.travelMonth}
-              onChange={(e) => update({ travelMonth: Number(e.target.value) })}
-            >
-              {MONTH_NAMES.map((m, i) => (
-                <option key={m} value={i + 1}>{m}</option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="text-sm font-semibold">Year</span>
-            <select
-              className="input mt-2"
-              value={form.travelYear}
-              onChange={(e) => update({ travelYear: Number(e.target.value) })}
-            >
-              {[0, 1].map((o) => {
-                const y = new Date().getFullYear() + o;
-                return <option key={y} value={y}>{y}</option>;
-              })}
-            </select>
-          </label>
-        </div>
-
-        <label className="mt-3 flex items-start gap-3 rounded-xl border border-sand-300 bg-white p-4">
-          <input
-            type="checkbox"
-            className="mt-1 h-5 w-5 accent-[#C4551F]"
-            checked={form.datesFlexible}
-            onChange={(e) => update({ datesFlexible: e.target.checked })}
-          />
-          <span className="text-[15px] leading-relaxed text-ink-700">
-            My dates are flexible. Tell me if moving them lowers the price.
-          </span>
-        </label>
-
-        {season && (
-          <div
-            className={`mt-3 rounded-xl p-4 text-[15px] leading-relaxed ${
-              season.label === 'peak'
-                ? 'bg-clay-100 text-ink-700'
-                : season.label === 'off'
-                  ? 'bg-sea-100 text-ink-700'
-                  : 'bg-sand-100 text-ink-700'
-            }`}
-          >
-            <strong className="font-semibold">
-              {MONTH_NAMES[form.travelMonth - 1]} is {season.label === 'off' ? 'off' : season.label} season.
-            </strong>{' '}
-            {season.note} {destination.bestMonthsSummary}
+      {step === 'destination' && (
+        <Step title="Where would you like to go?">
+          <div className="grid gap-3">
+            {liveDestinations.map((d) => (
+              <Choice
+                key={d.slug}
+                selected={form.destination === d.slug}
+                onClick={() => {
+                  set('destination', d.slug);
+                  set('cities', []);
+                  set('activities', []);
+                }}
+                title={d.name}
+                subtitle={d.tagline}
+              />
+            ))}
           </div>
-        )}
-      </Section>
+          <Note>
+            Malaysia, Singapore and Vietnam are not open yet. Message us if you want one of
+            those and we will tell you when they are.
+          </Note>
+        </Step>
+      )}
 
-      {/* Who */}
-      <Section title="Who is travelling?">
-        <Counter label="Adults" hint="12 to 59" value={form.adults} min={0} onChange={(v) => update({ adults: v })} />
-        <Counter label="Children" hint="Under 12. Hotel and activity pricing differs." value={form.children} min={0} onChange={(v) => update({ children: v })} />
-        <Counter label="Seniors" hint="60 and over. Same price, gentler suggestions." value={form.seniors} min={0} onChange={(v) => update({ seniors: v })} />
-      </Section>
-
-      {/* Style */}
-      <Section
-        title="What kind of trip is this?"
-        subtitle="Pick as many as apply. This reorders the suggestions below so the right things surface first. It does not hide anything."
-      >
-        <div className="flex flex-wrap gap-2">
-          {TRIP_STYLES.map((s) => {
-            const on = form.styles.includes(s.id);
-            return (
-              <button
-                key={s.id}
-                type="button"
-                aria-pressed={on}
-                onClick={() => toggleStyle(s.id)}
-                title={s.hint}
-                className={`min-h-[2.75rem] rounded-full border px-4 text-sm font-semibold transition-colors ${
-                  on
-                    ? 'border-clay bg-clay text-white'
-                    : 'border-sand-300 bg-white text-ink-700 hover:bg-sand-100'
-                }`}
+      {step === 'when' && (
+        <Step title="When do you want to travel?">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Month">
+              <select
+                className="input"
+                value={form.travelMonth}
+                onChange={(e) => set('travelMonth', Number(e.target.value))}
               >
-                {s.label}
+                {MONTH_NAMES.map((m, i) => (
+                  <option key={m} value={i + 1}>{m}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Year">
+              <select
+                className="input"
+                value={form.travelYear}
+                onChange={(e) => set('travelYear', Number(e.target.value))}
+              >
+                {[0, 1].map((o) => {
+                  const y = new Date().getFullYear() + o;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+            </Field>
+          </div>
+
+          <Toggle
+            checked={form.datesFlexible}
+            onChange={(v) => set('datesFlexible', v)}
+            label="My dates are flexible. Tell me if moving them is cheaper."
+          />
+
+          {destination && estimate && (
+            <div className="mt-4 rounded-xl bg-sand-100 p-4 text-[15px] leading-relaxed text-ink-700">
+              <strong className="font-semibold">
+                {MONTH_NAMES[form.travelMonth - 1]} is{' '}
+                {estimate.season.label === 'off' ? 'off' : estimate.season.label} season.
+              </strong>{' '}
+              {estimate.season.note} {destination.bestMonthsSummary}
+            </div>
+          )}
+        </Step>
+      )}
+
+      {step === 'length' && (
+        <Step title="How long do you want to go for?">
+          <div className="rounded-xl border border-sand-300 bg-white p-5 text-center">
+            <p className="text-4xl font-semibold tracking-tight">
+              {daysFromNights(form.nights)} days
+            </p>
+            <p className="mt-1 text-[15px] text-ink-500">
+              {form.nights} {form.nights === 1 ? 'night' : 'nights'}
+            </p>
+            <input
+              type="range"
+              min={MIN_NIGHTS}
+              max={MAX_NIGHTS}
+              value={form.nights}
+              onChange={(e) => set('nights', Number(e.target.value))}
+              className="mt-5 w-full accent-[#C4551F]"
+              aria-label="Number of nights"
+            />
+            <div className="flex justify-between text-xs text-ink-500">
+              <span>{MIN_NIGHTS + 1} days</span>
+              <span>{MAX_NIGHTS + 1} days</span>
+            </div>
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                className="h-11 w-11 rounded-full border border-sand-300 text-xl font-semibold disabled:opacity-30"
+                disabled={form.nights <= MIN_NIGHTS}
+                onClick={() => set('nights', form.nights - 1)}
+                aria-label="One night fewer"
+              >
+                −
               </button>
-            );
-          })}
-        </div>
-      </Section>
+              <button
+                type="button"
+                className="h-11 w-11 rounded-full border border-sand-300 text-xl font-semibold disabled:opacity-30"
+                disabled={form.nights >= MAX_NIGHTS}
+                onClick={() => set('nights', form.nights + 1)}
+                aria-label="One night more"
+              >
+                +
+              </button>
+            </div>
+          </div>
+          <Note>
+            Entirely your choice. We will tell you honestly if it is too little time for the
+            cities you pick, or more than you need.
+          </Note>
+        </Step>
+      )}
 
-      {/* Itinerary */}
-      <Section
-        title="Your day by day plan"
-        subtitle="Suggested activities are already added. Remove anything you do not want and add whatever you do."
-      >
-        <div className="space-y-4">
-          {tier.itinerary.map((day) => {
-            const key = String(day.day);
-            const ids = form.dayPlan[key] ?? [];
-            const chosen = ids.map(activityById).filter(Boolean) as Activity[];
-            const hours = chosen.reduce((sum, a) => sum + a.durationHours, 0);
-            const pickerOpen = openPicker === key;
+      {step === 'who' && (
+        <Step title="Who is travelling?">
+          <Counter label="Adults" hint="12 to 59" value={form.adults} min={0}
+            onChange={(v) => set('adults', v)} />
+          <Counter label="Children" hint="Under 12" value={form.children} min={0}
+            onChange={(v) => set('children', v)} />
+          {form.children > 0 && (
+            <Field label="Ages of the children" hint="Optional, but it changes what we suggest and what tickets cost.">
+              <input
+                className="input"
+                placeholder="For example 4 and 9"
+                value={form.childAges}
+                onChange={(e) => set('childAges', e.target.value)}
+              />
+            </Field>
+          )}
+          <Counter label="Seniors" hint="60 and over" value={form.seniors} min={0}
+            onChange={(v) => set('seniors', v)} />
+        </Step>
+      )}
 
-            const pool = destination.activities.filter((a) => {
-              if (ids.includes(a.id)) return false;
-              if (showAllFor === key) return true;
-              return !day.city || a.city === day.city;
-            });
-            const ranked = sortForParty(pool, form.styles, party);
+      {step === 'cities' && destination && (
+        <Step title={`Which parts of ${destination.name}?`}>
+          <div className="grid gap-3">
+            {destination.cities.map((c) => (
+              <Choice
+                key={c}
+                selected={form.cities.includes(c)}
+                multi
+                onClick={() => {
+                  const cities = toggle(form.cities, c);
+                  set('cities', cities);
+                  // Drop activities for a city that is no longer in the trip.
+                  set(
+                    'activities',
+                    form.activities.filter((id) => {
+                      const a = destination.activities.find((x) => x.id === id);
+                      return a ? cities.includes(a.city) : false;
+                    }),
+                  );
+                }}
+                title={c}
+                subtitle={`${destination.activities.filter((a) => a.city === c).length} things to do`}
+              />
+            ))}
+          </div>
+          {nightsByCity.length > 0 && (
+            <div className="mt-4 rounded-xl bg-sand-100 p-4 text-[15px] leading-relaxed text-ink-700">
+              <strong className="font-semibold">Suggested split of your {form.nights} nights: </strong>
+              {nightsByCity.map((c) => `${c.city} ${c.nights}`).join(', ')}. We will fine tune
+              this with you.
+            </div>
+          )}
+        </Step>
+      )}
 
-            return (
-              <div key={day.day} className="card p-5">
-                <div className="flex items-baseline justify-between gap-3">
-                  <h3 className="text-lg">
-                    Day {day.day}. {day.title}
-                  </h3>
-                  {day.city && <span className="shrink-0 text-sm text-ink-500">{day.city}</span>}
-                </div>
-                <p className="mt-1 text-[15px] leading-relaxed text-ink-700">{day.detail}</p>
+      {step === 'stay' && (
+        <Step title="Where do you want to stay?">
+          <div className="grid gap-3">
+            {STAY_TYPES.map((s) => (
+              <Choice
+                key={s.id}
+                selected={form.stayType === s.id}
+                onClick={() => set('stayType', s.id)}
+                title={s.label}
+                subtitle={s.hint}
+              />
+            ))}
+          </div>
+          <div className="mt-6">
+            <p className="text-sm font-semibold">
+              Roughly what are you happy to spend per room per night?
+            </p>
+            <div className="mt-3 grid gap-3">
+              {NIGHTLY_BUDGETS.map((b) => (
+                <Choice
+                  key={b}
+                  selected={form.nightlyBudget === b}
+                  onClick={() => set('nightlyBudget', b)}
+                  title={b.startsWith('Not sure') ? b : `₹${b}`}
+                />
+              ))}
+            </div>
+          </div>
+          {destination && <Note>{destination.costSamplesNote}</Note>}
+        </Step>
+      )}
 
-                {chosen.length > 0 ? (
-                  <ul className="mt-4 space-y-2">
-                    {chosen.map((a) => (
-                      <li
-                        key={a.id}
-                        className="flex items-start gap-3 rounded-xl border border-sand-200 bg-sand-50 p-3"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-baseline justify-between gap-3">
-                            <span className="font-semibold">{a.name}</span>
-                            <span className="shrink-0 text-sm font-semibold text-clay">
-                              {priceLabel(a.indicativePrice)}
+      {step === 'style' && (
+        <Step
+          title="What kind of trip is this?"
+          subtitle="Pick as many as apply. It decides what we put in front of you next."
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            {TRIP_STYLES.map((s) => (
+              <Choice
+                key={s.id}
+                selected={form.styles.includes(s.id)}
+                multi
+                onClick={() => set('styles', toggle(form.styles, s.id))}
+                title={s.label}
+                subtitle={s.hint}
+              />
+            ))}
+          </div>
+        </Step>
+      )}
+
+      {isActivityStep && destination && (
+        <ActivityStep
+          city={activityCity}
+          nights={nightsByCity.find((c) => c.city === activityCity)?.nights ?? 0}
+          all={destination.activities.filter((a) => a.city === activityCity)}
+          selected={form.activities}
+          styles={form.styles}
+          party={party}
+          onlyRecommended={onlyRecommended}
+          setOnlyRecommended={setOnlyRecommended}
+          onToggle={(id) => set('activities', toggle(form.activities, id))}
+          onAddRecommended={(ids) =>
+            set('activities', Array.from(new Set([...form.activities, ...ids])))
+          }
+        />
+      )}
+
+      {step === 'budget' && (
+        <Step
+          title="What budget are you working with?"
+          subtitle="Per person, including flights. It decides which hotels we put forward."
+        >
+          <div className="grid gap-3">
+            {TOTAL_BUDGETS.map((b) => (
+              <Choice
+                key={b}
+                selected={form.budgetBand === b}
+                onClick={() => set('budgetBand', b)}
+                title={b.startsWith('Not sure') ? b : `₹${b}`}
+              />
+            ))}
+          </div>
+          {destination && (
+            <Note>
+              Return flights alone are usually{' '}
+              {formatInrRange(
+                destination.pricing.indicativeFlight.low,
+                destination.pricing.indicativeFlight.high,
+              )}{' '}
+              per person
+              {destination.visa.feeInr > 0
+                ? `, and the visa is ${formatInr(destination.visa.feeInr)} per person`
+                : ''}
+              . Both are inside the estimate we show you next.
+            </Note>
+          )}
+        </Step>
+      )}
+
+      {step === 'review' && destination && estimate && (
+        <Step title="Here is your trip">
+          <div className="card p-5">
+            <p className="text-lg font-semibold">
+              {destination.name}, {daysFromNights(form.nights)} days
+            </p>
+            <p className="mt-1 text-[15px] text-ink-700">
+              {MONTH_NAMES[form.travelMonth - 1]} {form.travelYear}
+              {form.datesFlexible ? ', flexible' : ''} · {describeParty(form)} ·{' '}
+              {stayById(form.stayType).label}
+            </p>
+
+            <div className="mt-5 space-y-4 border-t border-sand-200 pt-5">
+              {nightsByCity.map((c) => {
+                const picked = form.activities
+                  .map((id) => destination.activities.find((a) => a.id === id))
+                  .filter((a): a is Activity => Boolean(a) && a!.city === c.city);
+                return (
+                  <div key={c.city}>
+                    <p className="font-semibold">
+                      {c.city}
+                      <span className="ml-2 font-normal text-ink-500">
+                        {c.nights} {c.nights === 1 ? 'night' : 'nights'}
+                      </span>
+                    </p>
+                    {picked.length > 0 ? (
+                      <ul className="mt-2 space-y-1.5">
+                        {picked.map((a) => (
+                          <li key={a.id} className="flex gap-2 text-[15px] text-ink-700">
+                            <Tick />
+                            <span>
+                              {a.name}
+                              <span className="text-ink-300"> · about {a.durationHours}h</span>
                             </span>
-                          </div>
-                          <p className="mt-1 text-[14px] leading-snug text-ink-700">
-                            {a.description}
-                          </p>
-                          <p className="mt-1 text-xs text-ink-300">
-                            About {a.durationHours} hours
-                            {a.note ? `. ${a.note}` : ''}
-                            {a.infoUrl ? ' ' : ''}
-                          </p>
-                          {(a.infoUrl || a.videoUrl) && (
-                            <p className="mt-1 flex gap-3 text-xs">
-                              {a.infoUrl && (
-                                <a className="font-semibold text-sea underline underline-offset-2" href={a.infoUrl} target="_blank" rel="noopener noreferrer">
-                                  More detail
-                                </a>
-                              )}
-                              {a.videoUrl && (
-                                <a className="font-semibold text-sea underline underline-offset-2" href={a.videoUrl} target="_blank" rel="noopener noreferrer">
-                                  Watch a video
-                                </a>
-                              )}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          aria-label={`Remove ${a.name}`}
-                          onClick={() => removeActivity(day.day, a.id)}
-                          className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-sand-300 bg-white text-ink-500 hover:bg-sand-100"
-                        >
-                          ×
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="mt-4 rounded-xl border border-dashed border-sand-300 p-3 text-[15px] text-ink-500">
-                    Nothing planned. A free day is a perfectly good choice.
-                  </p>
-                )}
-
-                {hours > LONG_DAY_HOURS && (
-                  <p className="mt-3 text-sm text-clay">
-                    That is about {Math.round(hours)} hours of activity in one day. It can be
-                    done, but we would usually move something to another day.
-                  </p>
-                )}
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="btn-ghost h-11 min-h-0 px-4 text-sm"
-                    onClick={() => {
-                      setOpenPicker(pickerOpen ? null : key);
-                      setShowAllFor(null);
-                    }}
-                  >
-                    {pickerOpen ? 'Close' : 'Add an activity'}
-                  </button>
-                </div>
-
-                {pickerOpen && (
-                  <div className="mt-4 border-t border-sand-200 pt-4">
-                    {ranked.length === 0 ? (
-                      <p className="text-[15px] text-ink-500">Nothing left to add for this day.</p>
-                    ) : (
-                      <ul className="space-y-2">
-                        {ranked.slice(0, 8).map((a) => (
-                          <li key={a.id}>
-                            <button
-                              type="button"
-                              onClick={() => addActivity(day.day, a.id)}
-                              className="w-full rounded-xl border border-sand-300 bg-white p-3 text-left transition-colors hover:bg-sand-100"
-                            >
-                              <span className="flex items-baseline justify-between gap-3">
-                                <span className="font-semibold">{a.name}</span>
-                                <span className="shrink-0 text-sm font-semibold text-clay">
-                                  {priceLabel(a.indicativePrice)}
-                                </span>
-                              </span>
-                              <span className="mt-1 block text-[14px] leading-snug text-ink-700">
-                                {a.description}
-                              </span>
-                              <span className="mt-1 flex flex-wrap items-center gap-2 text-xs text-ink-300">
-                                <span>{a.city}</span>
-                                <span>About {a.durationHours} hours</span>
-                                {matchesStyles(a, form.styles) && (
-                                  <span className="rounded-full bg-sea-100 px-2 py-0.5 font-semibold text-sea">
-                                    Matches your style
-                                  </span>
-                                )}
-                                {a.audience === 'adult' && (
-                                  <span className="rounded-full bg-sand-100 px-2 py-0.5 font-semibold text-ink-500">
-                                    Adults only
-                                  </span>
-                                )}
-                                {a.intensity === 'high' && (
-                                  <span className="rounded-full bg-sand-100 px-2 py-0.5 font-semibold text-ink-500">
-                                    Physically demanding
-                                  </span>
-                                )}
-                              </span>
-                            </button>
                           </li>
                         ))}
                       </ul>
+                    ) : (
+                      <p className="mt-1 text-[15px] text-ink-500">
+                        Nothing booked. We will suggest things on the call.
+                      </p>
                     )}
-                    <button
-                      type="button"
-                      className="mt-3 text-sm font-semibold text-sea underline underline-offset-4"
-                      onClick={() => setShowAllFor(showAllFor === key ? null : key)}
-                    >
-                      {showAllFor === key
-                        ? `Show only ${day.city ?? 'nearby'} activities`
-                        : `Show everything in ${destination.name}`}
-                    </button>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </Section>
+                );
+              })}
+            </div>
+          </div>
 
-      {/* Practical info */}
-      <Section title="Worth knowing before you decide">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <InfoCard title="Visa">
-            <p>{destination.visa.type}</p>
-            <p className="mt-1 text-ink-500">{destination.visa.timeline}</p>
-            {destination.visa.feeInr > 0 && (
-              <p className="mt-1 text-ink-500">
-                {formatInr(destination.visa.feeInr)} per person, included in the package.
-              </p>
-            )}
-          </InfoCard>
-          <InfoCard title="Best months">
-            <p>{destination.bestMonthsSummary}</p>
-            <p className="mt-1 text-ink-500">{destination.flightTimeSummary}</p>
-          </InfoCard>
-          <InfoCard title="Daily spending on the ground">
-            <p>{destination.costSamplesNote}</p>
-          </InfoCard>
-          <InfoCard title="Typical prices there">
-            <ul className="space-y-1">
-              {destination.costSamples.slice(0, 4).map((c) => (
-                <li key={c.label} className="flex justify-between gap-3">
-                  <span>{c.label}</span>
-                  <span className="shrink-0 font-semibold">
-                    {formatInrRange(c.fromInr, c.toInr)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </InfoCard>
-        </div>
-      </Section>
-
-      {/* Estimate */}
-      {estimate && (
-        <Section title="Your estimate">
-          <div className="card p-5">
+          <div className="card mt-4 p-5">
             <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">
               Estimated total for {estimate.travellers}{' '}
               {estimate.travellers === 1 ? 'traveller' : 'travellers'}
@@ -610,138 +594,235 @@ export default function PlanForm() {
               About {formatInrRange(estimate.perPerson.low, estimate.perPerson.high)} per person.
             </p>
             <dl className="mt-5 space-y-2 border-t border-sand-200 pt-4 text-[15px]">
-              <Row label="Land package, hotels and transfers">
+              <RowLine label="Hotels, transfers, visa and activities">
                 {formatInrRange(estimate.land.low, estimate.land.high)}
-              </Row>
-              <Row label="Flights, estimated">
+              </RowLine>
+              <RowLine label="Flights, estimated">
                 {formatInrRange(estimate.flights.low, estimate.flights.high)}
-              </Row>
-              <Row label={`Activities you selected (${chosenIds.length})`}>
-                {estimate.activityTotal > 0 ? formatInr(estimate.activityTotal) : 'None yet'}
-              </Row>
+              </RowLine>
             </dl>
             <p className="mt-4 rounded-xl bg-sand-100 p-4 text-sm leading-relaxed text-ink-700">
-              This is an estimate, not a quote. Flights in particular move with the date. We
-              confirm real prices on your dates before anything is booked.
+              An estimate, not a quote. It moves with your exact dates, with availability, and
+              with what flights cost on the day we ticket. We confirm every number with you
+              before anything is booked.
             </p>
           </div>
-        </Section>
+        </Step>
       )}
 
-      {/* Budget */}
-      <Section
-        title="What budget are you working with?"
-        subtitle="Per person, including flights. It helps us pitch hotels at the right level."
-      >
-        <div className="grid gap-3">
-          {BUDGET_BANDS.map((band) => (
-            <Choice
-              key={band}
-              selected={form.budgetBand === band}
-              onClick={() => update({ budgetBand: band })}
-              title={band === 'Not sure yet' ? band : `₹${band}`}
-            />
-          ))}
-        </div>
-      </Section>
+      {step === 'contact' && (
+        <Step title="Where should we send the quote?">
+          <Field label="Name">
+            <input className="input" value={form.name} autoComplete="name"
+              onChange={(e) => set('name', e.target.value)} />
+          </Field>
+          <Field label="WhatsApp number" hint="This is the one that matters.">
+            <input className="input" type="tel" inputMode="numeric" autoComplete="tel"
+              placeholder="9876543210" value={form.phone}
+              onChange={(e) => set('phone', e.target.value)} />
+          </Field>
+          <Field label="Email" hint="Optional.">
+            <input className="input" type="email" autoComplete="email" value={form.email}
+              onChange={(e) => set('email', e.target.value)} />
+          </Field>
+          <Field label="Anything else we should know" hint="Optional.">
+            <textarea className="input min-h-24 py-3" rows={3}
+              placeholder="Occasion, dietary needs, mobility, hotel preferences, anything at all."
+              value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+          </Field>
+        </Step>
+      )}
 
-      {/* Contact */}
-      <div ref={contactRef}>
-        <Section title="Where should we send the quote?">
-          <label className="block">
-            <span className="text-sm font-semibold">Name</span>
-            <input
-              className="input mt-2"
-              value={form.name}
-              autoComplete="name"
-              onChange={(e) => update({ name: e.target.value })}
-            />
-          </label>
-          <label className="mt-4 block">
-            <span className="text-sm font-semibold">WhatsApp number</span>
-            <input
-              className="input mt-2"
-              type="tel"
-              inputMode="numeric"
-              autoComplete="tel"
-              placeholder="9876543210"
-              value={form.phone}
-              onChange={(e) => update({ phone: e.target.value })}
-            />
-          </label>
-          <label className="mt-4 block">
-            <span className="text-sm font-semibold">Email</span>
-            <span className="ml-2 text-sm text-ink-500">Optional</span>
-            <input
-              className="input mt-2"
-              type="email"
-              autoComplete="email"
-              value={form.email}
-              onChange={(e) => update({ email: e.target.value })}
-            />
-          </label>
-          <label className="mt-4 block">
-            <span className="text-sm font-semibold">Anything else we should know</span>
-            <span className="ml-2 text-sm text-ink-500">Optional</span>
-            <textarea
-              className="input mt-2 min-h-24 py-3"
-              rows={3}
-              placeholder="Occasion, dietary needs, mobility, hotel preference, anything at all."
-              value={form.notes}
-              onChange={(e) => update({ notes: e.target.value })}
-            />
-          </label>
+      {error && <p className="mt-5 text-sm font-medium text-clay">{error}</p>}
 
-          {error && <p className="mt-3 text-sm font-medium text-clay">{error}</p>}
-
-          <button
-            type="button"
-            className="btn-primary mt-6 w-full disabled:opacity-40"
-            disabled={submitting}
-            onClick={handleSubmit}
-          >
+      <div className="mt-8 flex gap-3">
+        {stepIndex > 0 && (
+          <button type="button" className="btn-ghost flex-1" onClick={back}>
+            Back
+          </button>
+        )}
+        {step === 'contact' ? (
+          <button type="button" className="btn-primary flex-1 disabled:opacity-40"
+            disabled={submitting} onClick={submit}>
             {submitting ? 'Sending' : 'Send my requirements'}
           </button>
-          <p className="mt-3 text-center text-sm text-ink-500">{site.quotePromise}</p>
-        </Section>
+        ) : (
+          <button type="button" className="btn-primary flex-1" onClick={next}>
+            Continue
+          </button>
+        )}
       </div>
-
-      {/* Sticky summary */}
-      {estimate && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-sand-200 bg-white/95 backdrop-blur">
-          <div className="wrap flex max-w-3xl items-center justify-between gap-4 py-3">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-semibold">
-                {formatInrRange(estimate.total.low, estimate.total.high)}
-              </p>
-              <p className="truncate text-xs text-ink-500">
-                {estimate.travellers} travelling, {chosenIds.length} activities, estimated
-              </p>
-            </div>
-            <button
-              type="button"
-              className="btn-primary h-11 min-h-0 shrink-0 px-5 text-sm"
-              onClick={() => contactRef.current?.scrollIntoView({ behavior: 'smooth' })}
-            >
-              Send it
-            </button>
-          </div>
-        </div>
+      {step === 'contact' && (
+        <p className="mt-3 text-center text-sm text-ink-500">{site.quotePromise}</p>
       )}
     </div>
   );
 }
 
-function priceLabel(price: number) {
-  return price === 0 ? 'No ticket cost' : formatInr(price);
+/* ---------------- activity step ---------------- */
+
+function ActivityStep({
+  city, nights, all, selected, styles, party,
+  onlyRecommended, setOnlyRecommended, onToggle, onAddRecommended,
+}: {
+  city: string;
+  nights: number;
+  all: Activity[];
+  selected: string[];
+  styles: TripStyle[];
+  party: Party;
+  onlyRecommended: boolean;
+  setOnlyRecommended: (v: boolean) => void;
+  onToggle: (id: string) => void;
+  onAddRecommended: (ids: string[]) => void;
+}) {
+  const ranked = sortForParty(all, styles, party);
+  const recommended = ranked.filter((a) => matchesStyles(a, styles));
+  const showing = onlyRecommended && recommended.length >= 3 ? recommended : ranked;
+  const chosenHere = all.filter((a) => selected.includes(a.id)).length;
+  const topThree = recommended.slice(0, 3).map((a) => a.id);
+
+  return (
+    <div>
+      <div className="flex items-baseline justify-between gap-3">
+        <h1 className="text-[1.6rem] leading-tight sm:text-3xl">Things to do in {city}</h1>
+      </div>
+      <p className="mt-2 text-[15px] leading-relaxed text-ink-700">
+        {nights} {nights === 1 ? 'night' : 'nights'} here. Pick whatever appeals. Skipping all
+        of this is fine, and a free day is a perfectly good choice.
+      </p>
+
+      <div className="sticky top-16 z-20 -mx-5 mt-5 border-b border-sand-200 bg-sand-50/95 px-5 py-3 backdrop-blur">
+        <div className="flex items-center justify-between gap-3">
+          <div className="inline-flex rounded-full border border-sand-300 bg-white p-1">
+            <button
+              type="button"
+              onClick={() => setOnlyRecommended(true)}
+              className={`min-h-[2.25rem] rounded-full px-4 text-sm font-semibold ${
+                onlyRecommended ? 'bg-ink text-white' : 'text-ink-700'
+              }`}
+            >
+              For you
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlyRecommended(false)}
+              className={`min-h-[2.25rem] rounded-full px-4 text-sm font-semibold ${
+                !onlyRecommended ? 'bg-ink text-white' : 'text-ink-700'
+              }`}
+            >
+              All {all.length}
+            </button>
+          </div>
+          <span className="shrink-0 text-sm font-semibold text-ink-500">
+            {chosenHere} chosen
+          </span>
+        </div>
+      </div>
+
+      {topThree.length === 3 && chosenHere === 0 && (
+        <button
+          type="button"
+          onClick={() => onAddRecommended(topThree)}
+          className="btn-ghost mt-4 w-full text-sm"
+        >
+          Add the three we would pick
+        </button>
+      )}
+
+      <div className="mt-4 grid gap-3">
+        {showing.map((a) => {
+          const on = selected.includes(a.id);
+          return (
+            <button
+              key={a.id}
+              type="button"
+              aria-pressed={on}
+              onClick={() => onToggle(a.id)}
+              className={`flex w-full items-start gap-3 rounded-xl2 border p-4 text-left transition-colors ${
+                on
+                  ? 'border-clay bg-clay-100 ring-1 ring-clay'
+                  : 'border-sand-300 bg-white hover:bg-sand-100'
+              }`}
+            >
+              <span
+                aria-hidden
+                className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 text-sm font-bold ${
+                  on ? 'border-clay bg-clay text-white' : 'border-sand-300 bg-white text-transparent'
+                }`}
+              >
+                ✓
+              </span>
+              <span className="flex-1">
+                <span className="flex items-baseline justify-between gap-3">
+                  <span className="font-semibold leading-snug">{a.name}</span>
+                  {SHOW_ACTIVITY_PRICES && (
+                    <span className="shrink-0 text-sm font-semibold text-clay">
+                      {a.indicativePrice === 0 ? 'Free' : formatInr(a.indicativePrice)}
+                    </span>
+                  )}
+                </span>
+                <span className="mt-1 block text-[14px] leading-relaxed text-ink-700">
+                  {a.description}
+                </span>
+                <span className="mt-2 flex flex-wrap gap-1.5">
+                  <Tag>About {a.durationHours}h</Tag>
+                  {matchesStyles(a, styles) && <Tag tone="sea">Your kind of thing</Tag>}
+                  {a.audience === 'adult' && <Tag>Adults only</Tag>}
+                  {a.audience === 'kids' && <Tag>Good with children</Tag>}
+                  {a.intensity === 'high' && <Tag>Active</Tag>}
+                  {a.intensity === 'low' && <Tag>Easy going</Tag>}
+                  {a.note && <Tag>{a.note}</Tag>}
+                </span>
+                {(a.infoUrl || a.videoUrl) && (
+                  <span className="mt-2 flex gap-3 text-xs">
+                    {a.infoUrl && (
+                      <a href={a.infoUrl} target="_blank" rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="font-semibold text-sea underline underline-offset-2">
+                        More detail
+                      </a>
+                    )}
+                    {a.videoUrl && (
+                      <a href={a.videoUrl} target="_blank" rel="noopener noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="font-semibold text-sea underline underline-offset-2">
+                        Watch a video
+                      </a>
+                    )}
+                  </span>
+                )}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {onlyRecommended && recommended.length >= 3 && (
+        <button
+          type="button"
+          onClick={() => setOnlyRecommended(false)}
+          className="mt-4 w-full text-sm font-semibold text-sea underline underline-offset-4"
+        >
+          Show all {all.length} things to do in {city}
+        </button>
+      )}
+    </div>
+  );
 }
 
-function Sent({
-  result,
-  name,
-  destinationName,
-  brochure,
-  estimate,
+/* ---------------- shared pieces ---------------- */
+
+function describeParty(f: FormState) {
+  const bits: string[] = [];
+  if (f.adults) bits.push(`${f.adults} ${f.adults === 1 ? 'adult' : 'adults'}`);
+  if (f.children) bits.push(`${f.children} ${f.children === 1 ? 'child' : 'children'}`);
+  if (f.seniors) bits.push(`${f.seniors} ${f.seniors === 1 ? 'senior' : 'seniors'}`);
+  return bits.join(', ') || '1 adult';
+}
+
+function Done({
+  result, name, destinationName, brochure, estimate,
 }: {
   result: SubmitResult;
   name: string;
@@ -757,7 +838,7 @@ function Sent({
       </h1>
       <p className="mt-4 text-[17px] leading-relaxed text-ink-700">
         We have your {destinationName} plan. {site.quotePromise} We will come back with real
-        prices on your dates, and we will flag anything in the itinerary we would change.
+        prices on your dates and flag anything we would change.
       </p>
       {estimate && (
         <p className="mt-4 rounded-xl bg-sand-100 p-4 text-[15px] leading-relaxed text-ink-700">
@@ -785,87 +866,118 @@ function Sent({
   );
 }
 
-/* ---------- small pieces ---------- */
+function Progress({ index, total }: { index: number; total: number }) {
+  const pct = Math.round(((index + 1) / total) * 100);
+  return (
+    <div className="mb-7">
+      <div className="flex items-center justify-between text-sm text-ink-500">
+        <span>Step {index + 1} of {total}</span>
+        <span>{pct} percent</span>
+      </div>
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-sand-200">
+        <div className="h-full rounded-full bg-clay transition-all duration-300"
+          style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
 
-function Section({
-  title,
-  subtitle,
-  children,
+function Step({
+  title, subtitle, children,
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
 }) {
   return (
-    <section className="mt-10 border-t border-sand-200 pt-8">
-      <h2 className="text-xl sm:text-2xl">{title}</h2>
+    <div>
+      <h1 className="text-[1.6rem] leading-tight sm:text-3xl">{title}</h1>
       {subtitle && (
         <p className="mt-2 text-[15px] leading-relaxed text-ink-700">{subtitle}</p>
       )}
-      <div className="mt-5">{children}</div>
-    </section>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-ink-700">{label}</dt>
-      <dd className="shrink-0 font-semibold">{children}</dd>
+      <div className="mt-6">{children}</div>
     </div>
   );
 }
 
-function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
+function Note({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-sand-200 bg-white p-4 text-[15px] leading-relaxed text-ink-700">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-ink-500">{title}</h3>
+    <p className="mt-4 text-sm leading-relaxed text-ink-500">{children}</p>
+  );
+}
+
+function Field({
+  label, hint, children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="mt-4 block first:mt-0">
+      <span className="text-sm font-semibold">{label}</span>
+      {hint && <span className="mt-0.5 block text-sm text-ink-500">{hint}</span>}
       <div className="mt-2">{children}</div>
-    </div>
+    </label>
+  );
+}
+
+function Toggle({
+  checked, onChange, label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="mt-4 flex items-start gap-3 rounded-xl border border-sand-300 bg-white p-4">
+      <input type="checkbox" className="mt-1 h-5 w-5 accent-[#C4551F]"
+        checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <span className="text-[15px] leading-relaxed text-ink-700">{label}</span>
+    </label>
   );
 }
 
 function Choice({
-  selected,
-  onClick,
-  title,
-  subtitle,
-  trailing,
+  selected, onClick, title, subtitle, multi,
 }: {
   selected: boolean;
   onClick: () => void;
   title: string;
   subtitle?: string;
-  trailing?: string;
+  multi?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={selected}
-      className={`w-full rounded-xl border p-4 text-left transition-colors ${
+      className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition-colors ${
         selected
           ? 'border-clay bg-clay-100 ring-1 ring-clay'
           : 'border-sand-300 bg-white hover:bg-sand-100'
       }`}
     >
-      <span className="flex items-baseline justify-between gap-3">
-        <span className="font-semibold">{title}</span>
-        {trailing && <span className="shrink-0 text-sm text-ink-500">{trailing}</span>}
+      <span
+        aria-hidden
+        className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center border-2 text-xs font-bold ${
+          multi ? 'rounded' : 'rounded-full'
+        } ${selected ? 'border-clay bg-clay text-white' : 'border-sand-300 bg-white text-transparent'}`}
+      >
+        ✓
       </span>
-      {subtitle && (
-        <span className="mt-1 block text-[14px] leading-snug text-ink-700">{subtitle}</span>
-      )}
+      <span className="flex-1">
+        <span className="block font-semibold">{title}</span>
+        {subtitle && (
+          <span className="mt-0.5 block text-[14px] leading-snug text-ink-700">{subtitle}</span>
+        )}
+      </span>
     </button>
   );
 }
 
 function Counter({
-  label,
-  hint,
-  value,
-  min,
-  onChange,
+  label, hint, value, min, onChange,
 }: {
   label: string;
   hint: string;
@@ -880,26 +992,47 @@ function Counter({
         <p className="text-sm text-ink-500">{hint}</p>
       </div>
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          aria-label={`Fewer ${label.toLowerCase()}`}
+        <button type="button" aria-label={`Fewer ${label.toLowerCase()}`}
           className="h-11 w-11 rounded-full border border-sand-300 text-xl font-semibold disabled:opacity-30"
-          disabled={value <= min}
-          onClick={() => onChange(value - 1)}
-        >
+          disabled={value <= min} onClick={() => onChange(value - 1)}>
           −
         </button>
         <span className="w-6 text-center text-lg font-semibold tabular-nums">{value}</span>
-        <button
-          type="button"
-          aria-label={`More ${label.toLowerCase()}`}
+        <button type="button" aria-label={`More ${label.toLowerCase()}`}
           className="h-11 w-11 rounded-full border border-sand-300 text-xl font-semibold disabled:opacity-30"
-          disabled={value >= 12}
-          onClick={() => onChange(value + 1)}
-        >
+          disabled={value >= 12} onClick={() => onChange(value + 1)}>
           +
         </button>
       </div>
     </div>
+  );
+}
+
+function Tag({ children, tone }: { children: React.ReactNode; tone?: 'sea' }) {
+  return (
+    <span
+      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+        tone === 'sea' ? 'bg-sea-100 text-sea' : 'bg-sand-100 text-ink-500'
+      }`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function RowLine({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-ink-700">{label}</dt>
+      <dd className="shrink-0 font-semibold">{children}</dd>
+    </div>
+  );
+}
+
+function Tick() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden className="mt-1 h-4 w-4 shrink-0 text-sea" fill="currentColor">
+      <path d="M8.1 13.3 5.3 10.5l-1.2 1.2 4 4 8-8-1.2-1.2z" />
+    </svg>
   );
 }

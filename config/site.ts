@@ -24,6 +24,13 @@ export const site = {
   ],
 } as const;
 
+/**
+ * Per activity prices are hidden from customers until the rate card is final.
+ * Prices still drive the estimate: this only controls what is displayed.
+ * Flip to true when you are happy with the numbers in config/destinations.ts.
+ */
+export const SHOW_ACTIVITY_PRICES = false;
+
 /** Country code first, digits only. No plus sign, no spaces. */
 export const whatsappNumber =
   process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '919999999999'; // TODO via .env.local

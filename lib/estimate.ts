@@ -22,6 +22,8 @@ export interface EstimateInput {
   children: number;
   /** Priced as adults. Tracked separately because it changes what we suggest. */
   seniors?: number;
+  /** From config/stay.ts. Scales the land rate. Defaults to 4 star. */
+  stayMultiplier?: number;
   activityIds: string[];
   /** 1 = January through 12 = December. */
   travelMonth: number;
@@ -85,9 +87,13 @@ export function estimateTrip(input: EstimateInput): Estimate {
     activityTotal += (activity.childPrice ?? activity.indicativePrice) * children;
   }
 
-  // Season moves hotel and ground cost. It does not move activity prices,
-  // which are set by the operator and hold across the year.
-  const landMid = (adultNights + childNights + fixed) * season.multiplier + activityTotal;
+  // Season and accommodation both move hotel and ground cost. Neither moves
+  // activity prices, which are set by the operator and hold across the year.
+  const stay = input.stayMultiplier ?? 1;
+  const landMid =
+    (adultNights + childNights) * season.multiplier * stay +
+    fixed * season.multiplier +
+    activityTotal;
   const land = spread(landMid);
 
   // Airfare scales per head and is not affected by the land season multiplier.

@@ -11,21 +11,21 @@ export interface InquiryPayload {
   phone: string;
   email: string;
   destination: string;
-  tier: string;
   travelMonth: string;
   datesFlexible: boolean;
   nights: number;
+  days: number;
   adults: number;
   children: number;
+  childAges: string;
   seniors: number;
+  cities: string[];
+  stayType: string;
+  nightlyBudget: string;
   /** The trip style chips. The fastest read on who this group is. */
   styles: string[];
   activities: string[];
-  /** Activities they added beyond the suggestion. Signals real intent. */
-  activitiesAdded: string[];
-  /** Suggested activities they took out. Signals what to avoid pitching. */
-  suggestionsRemoved: string[];
-  /** Day by day, as one readable line. */
+  /** City by city, with nights and chosen activities, as one readable line. */
   itinerary: string;
   activityTotal: number;
   budgetBand: string;

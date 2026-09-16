@@ -134,3 +134,23 @@ test('free activities add nothing to the total', () => {
   assert.equal(withFree.activityTotal, 0);
   assert.equal(withFree.total.low, without.total.low);
 });
+
+test('a more expensive stay raises the land cost but not the flights', () => {
+  const budget = estimateTrip({ ...base, stayMultiplier: 0.78 });
+  const luxury = estimateTrip({ ...base, stayMultiplier: 1.45 });
+  assert.ok(luxury.land.low > budget.land.low);
+  assert.equal(luxury.flights.low, budget.flights.low);
+  assert.equal(luxury.flights.high, budget.flights.high);
+});
+
+test('stay choice does not change activity pricing', () => {
+  const a = estimateTrip({ ...base, stayMultiplier: 0.78, activityIds: ['desert-safari'] });
+  const b = estimateTrip({ ...base, stayMultiplier: 1.45, activityIds: ['desert-safari'] });
+  assert.equal(a.activityTotal, b.activityTotal);
+});
+
+test('nights are free choice, and more nights cost more', () => {
+  const short = estimateTrip({ ...base, nights: 3 });
+  const long = estimateTrip({ ...base, nights: 11 });
+  assert.ok(long.land.low > short.land.low);
+});
