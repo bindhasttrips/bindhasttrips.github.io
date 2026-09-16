@@ -34,23 +34,50 @@ export type Intensity = 'low' | 'moderate' | 'high';
 export interface Activity {
   id: string;
   name: string;
+  /** One line, shown on the card. */
   description: string;
-  /** Per adult, in INR. Zero means there is no ticket cost. */
-  indicativePrice: number;
+  /** Two or three sentences, shown when the card is expanded. */
+  detail: string;
+  /**
+   * Per adult, in INR. null means not priced yet: it is excluded from the
+   * estimate and shown as "quoted separately" rather than faked as zero.
+   * Set a number here and it starts counting immediately.
+   */
+  indicativePrice: number | null;
   /** Per child. Falls back to indicativePrice when absent. */
-  childPrice?: number;
+  childPrice?: number | null;
   audience: Audience;
   durationHours: number;
   tags: TripStyle[];
+  /** Which group types this suits. Drives the recommended itinerary. */
+  suits: GroupType[];
   /** City or area within the destination. Drives grouping in the builder. */
   city: string;
   intensity: Intensity;
-  /** Optional operator or booking page. Left empty until real URLs are supplied. */
-  infoUrl?: string;
-  /** Optional video. Same rule: only real URLs. */
+  /** Under /public/images/activities. Falls back to a generated tile. */
+  image?: string;
+  /** A specific YouTube URL. Only ever a real one you have checked. */
   videoUrl?: string;
+  /** Operator or booking page. Only ever a real one. */
+  infoUrl?: string;
   note?: string;
 }
+
+/** Who they are travelling with. The strongest signal for what to suggest. */
+export type GroupType =
+  | 'couple'
+  | 'family'
+  | 'friends'
+  | 'seniors'
+  | 'solo';
+
+export const GROUP_TYPES: { id: GroupType; label: string; hint: string }[] = [
+  { id: 'couple', label: 'A couple', hint: 'Two of you, honeymoon or otherwise' },
+  { id: 'family', label: 'Family with children', hint: 'Pace and pricing change a lot' },
+  { id: 'friends', label: 'A group of friends', hint: 'Nightlife and activities' },
+  { id: 'seniors', label: 'With parents or grandparents', hint: 'Gentler days, less walking' },
+  { id: 'solo', label: 'On my own', hint: 'We keep an eye on you' },
+];
 
 export interface ItineraryDay {
   day: number;
@@ -120,7 +147,7 @@ export interface Destination {
   summary: string;
   bestMonthsSummary: string;
   flightTimeSummary: string;
-  /** Ordered, for grouping the activity catalogue. */
+  /** Ordered, for grouping the activity catalogue and allocating nights. */
   cities: string[];
   currency: { code: string; symbol: string; approxInrPerUnit: number };
   visa: VisaInfo;

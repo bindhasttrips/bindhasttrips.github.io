@@ -1,80 +1,87 @@
-# Connecting the enquiry form to your Google Sheet
+# Your control centre
 
-Ten minutes, once.
+The spreadsheet is the backend. The website can only talk to it through this
+script, and the script never returns a column a customer should not see.
 
-## 1. Create the spreadsheet
+## One time setup
 
-Go to https://sheets.new and name it something like `Bindhast Trips data`.
-You do not need to create any tabs by hand. The script creates the `Inquiries`
-tab with the correct headers the first time a form is submitted.
+1. Create a spreadsheet at https://sheets.new and name it `Bindhast Trips`.
+2. **Extensions > Apps Script**. Delete everything and paste `apps-script/Code.gs`.
+3. At the top of the file set:
+   - `NOTIFY_EMAIL` — where lead alerts go
+   - `SITE_URL` — your site, no trailing slash
+   - `WHATSAPP_NUMBER` — digits only, country code first
+4. Save. Reload the spreadsheet tab. A **Bindhast** menu appears.
+5. **Bindhast > Set up this sheet.** This writes the headers, freezes them and
+   adds the dropdowns.
+6. **Deploy > New deployment > Web app.** Execute as **Me**, access **Anyone**.
+   Authorise when asked: Advanced, then Go to (project), then Allow.
+7. Copy the `/exec` URL.
 
-## 2. Add the script
-
-1. In that spreadsheet: **Extensions > Apps Script**.
-2. Delete whatever is in `Code.gs` and paste the contents of
-   `apps-script/Code.gs` from this repository.
-3. Check that `NOTIFY_EMAIL` near the top is the address you want alerts at.
-4. Save.
-
-## 3. Deploy it as a web app
-
-1. **Deploy > New deployment**.
-2. Click the gear next to "Select type" and choose **Web app**.
-3. Set Execute as: **Me**, and Who has access: **Anyone**.
-4. **Deploy**, then authorise when Google asks. You will see an "unverified app"
-   warning because it is your own script: choose **Advanced**, then
-   **Go to (project name)**, then **Allow**.
-5. Copy the **Web app URL**. It ends in `/exec`.
-
-## 4. Point the site at it
+Then point the site at it:
 
 ```bash
-gh variable set NEXT_PUBLIC_APPS_SCRIPT_URL --repo bindhasttrips/bindhasttrips.github.io --body "PASTE_THE_EXEC_URL_HERE"
-```
-
-Then rebuild:
-
-```bash
+gh variable set NEXT_PUBLIC_APPS_SCRIPT_URL --repo bindhasttrips/bindhasttrips.github.io --body "PASTE_THE_EXEC_URL"
 gh workflow run "Deploy to GitHub Pages" --repo bindhasttrips/bindhasttrips.github.io
 ```
 
-For local development, put the same line in `.env.local`.
+**Every time you change `Code.gs`** you must go to **Deploy > Manage deployments
+> edit > Version: New version**. Editing the code alone does nothing to the live
+URL. This catches everyone out once.
 
-## 5. Test it
+## How a booking moves through the sheet
 
-Submit the form on the live site with your own number. Within a few seconds you
-should get an email, and a row should appear in the `Inquiries` tab.
+Columns A to AH are what the customer told you. Everything from `quotedTotal`
+onwards is your working area.
 
-## Two things that catch people out
+| Column | What it does |
+|---|---|
+| `status` | Dropdown: new, contacted, quoted, deposit sent, booked, travelling, completed, lost |
+| `quotedTotal` | The real price you settled on |
+| `depositDue` | What you are asking for now |
+| `amountPaid` | Update as money arrives |
+| `balance` | Calculates itself |
+| `paymentLink` | Paste the Razorpay link you generated |
+| `paymentStatus` | Dropdown, and it shows on their tracker |
+| `whatsappQuote` | **Click it.** Opens WhatsApp with the quote, the payment link and their tracker link already written |
+| `stage_*` | Six dropdowns: pending, in_progress, done, blocked. These drive the tracker |
+| `allowEdit` | Tick means they can still change their plan. Untick to freeze it |
+| `revoked` | Tick to kill both links permanently |
+| `trackerLink` | Their personal progress page |
+| `editLink` | Their personal edit page |
+
+Editing any stage or payment cell updates `lastUpdated` automatically, and the
+tracker shows that timestamp. It is the main trust signal on the page, so let it
+do its job.
+
+## Freezing a plan
+
+While `allowEdit` is ticked, the customer can reopen their plan and change it.
+Once you have started booking, select the row and use
+**Bindhast > Freeze the plan**. Their edit link then tells them to call you
+instead, and no request from them can alter the row.
+
+This is enforced on the server, not in the browser, so it holds even if someone
+keeps an old page open.
+
+## Security, and why it is built this way
 
 - **Never use File > Share > Publish to web on the spreadsheet.** That exposes
-  every row to anyone with the link, no matter what the script does.
-- After any edit to `Code.gs`, go to **Deploy > Manage deployments**, edit the
-  deployment and set Version to **New version**. Editing the code alone does not
-  change what the live URL runs.
+  every column, including what you paid suppliers, to anyone with the link, no
+  matter what this script does. All access goes through the web app.
+- Tokens are 32 random hex characters. Sequential ids such as `BK001` would let
+  anyone walk your entire customer list.
+- The tracker returns first name, destination, cities, month, days, travellers,
+  payment status and the six stages. Nothing else. No phone, no email, no
+  prices, no supplier data, no notes.
+- A wrong token, a revoked token and a missing row all return the same response,
+  so nobody can tell them apart by probing. Repeated failures are logged.
+- A customer edit can only ever rewrite the answer columns. Status, money,
+  stages and your notes are preserved server side.
 
-## If you already deployed an earlier version
+## The menu
 
-The column list changed. Delete the `Inquiries` tab and let the script recreate
-it on the next submission, then redeploy with **Deploy > Manage deployments >
-edit > Version: New version**.
-
-## What the sheet gives you
-
-One row per enquiry:
-
-- Who: name, phone, email
-- Trip: destination, package, travel month, flexible or fixed, nights
-- Party: adults, children, seniors, total
-- `tripStyles`: nightlife, family, relaxed, adventure, culture, food, shopping,
-  sightseeing. The fastest read on who you are about to call.
-- `activities`: everything they chose
-- `activitiesAdded`: what they added beyond our suggestion, which is the
-  strongest signal of what they actually want
-- `suggestionsRemoved`: what they took out, so you know what not to pitch
-- `itinerary`: the whole plan day by day in one cell
-- Money: budget band, activity total, and the estimate range they saw
-- `notes`: their free text
-
-Anything you add to the right of `ownerNotes` is private. The site never reads
-this sheet, so supplier costs, margin and personal details are safe there.
+- **Set up this sheet** — headers, dropdowns, frozen panes
+- **Allow the customer to edit** / **Freeze the plan** — on the selected rows
+- **Rebuild links and buttons** — regenerates tokens and formulas for a row
+- **Mark everything up to date** — bumps `lastUpdated` without changing anything

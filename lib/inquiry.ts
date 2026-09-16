@@ -6,11 +6,59 @@
  * string with Content-Type text/plain keeps it a CORS simple request and
  * avoids the preflight entirely. The script parses e.postData.contents.
  */
+/** Sent when an existing customer edits their own plan. */
+export interface EditablePlan {
+  ok: boolean;
+  error?: string;
+  firstName?: string;
+  token?: string;
+  name?: string;
+  phone?: string;
+  email?: string;
+  flyingFrom?: string;
+  destination?: string;
+  cities?: string[];
+  groupType?: string;
+  travelMonth?: string;
+  datesFlexible?: boolean;
+  nights?: number;
+  adults?: number;
+  children?: number;
+  childAges?: string;
+  seniors?: number;
+  styles?: string[];
+  stayType?: string;
+  nightlyBudget?: string;
+  budgetBand?: string;
+  activityIds?: string[];
+  helpCities?: string[];
+  notes?: string;
+}
+
+export async function fetchEditablePlan(editToken: string): Promise<EditablePlan> {
+  if (!APPS_SCRIPT_URL) return { ok: false, error: 'not-configured' };
+  try {
+    const res = await fetch(`${APPS_SCRIPT_URL}?e=${encodeURIComponent(editToken)}`, {
+      redirect: 'follow',
+    });
+    if (!res.ok) return { ok: false, error: 'unreachable' };
+    return (await res.json()) as EditablePlan;
+  } catch {
+    return { ok: false, error: 'unreachable' };
+  }
+}
+
 export interface InquiryPayload {
+  /** Present only when an existing enquiry is being changed. */
+  action?: 'update';
+  editToken?: string;
   name: string;
   phone: string;
   email: string;
+  /** Departure city. Fares move a lot with this. */
+  flyingFrom: string;
   destination: string;
+  groupType: string;
   travelMonth: string;
   datesFlexible: boolean;
   nights: number;
@@ -22,12 +70,15 @@ export interface InquiryPayload {
   cities: string[];
   stayType: string;
   nightlyBudget: string;
-  /** The trip style chips. The fastest read on who this group is. */
   styles: string[];
   activities: string[];
-  /** City by city, with nights and chosen activities, as one readable line. */
+  /** Stable ids, so an edit round trips exactly. */
+  activityIds: string[];
+  /** Cities where they said they have no idea and want us to plan it. */
+  helpCities: string[];
   itinerary: string;
   activityTotal: number;
+  unpricedActivities: number;
   budgetBand: string;
   estimateLow: number;
   estimateHigh: number;

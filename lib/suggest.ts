@@ -1,9 +1,11 @@
-import type { Activity, TripStyle } from '../config/types.ts';
+import type { Activity, GroupType, TripStyle } from '../config/types.ts';
 
 export interface Party {
   adults: number;
   children: number;
   seniors: number;
+  /** Who they are travelling with. The strongest single signal. */
+  groupType?: GroupType;
 }
 
 /**
@@ -17,6 +19,11 @@ export function scoreActivity(
   party: Party,
 ): number {
   let score = 0;
+
+  // Who they are travelling with outweighs the style chips, because it is a
+  // harder fact: a family with a four year old cannot take the 1,260 steps.
+  if (party.groupType && activity.suits.includes(party.groupType)) score += 14;
+  if (party.groupType && !activity.suits.includes(party.groupType)) score -= 10;
 
   for (const tag of activity.tags) {
     if (styles.includes(tag)) score += 10;
@@ -61,4 +68,35 @@ export function sortForParty(
 export function matchesStyles(activity: Activity, styles: TripStyle[]): boolean {
   if (styles.length === 0) return false;
   return activity.tags.some((t) => styles.includes(t));
+}
+
+/** True when it suits the group they said they are travelling with. */
+export function suitsGroup(activity: Activity, groupType?: GroupType): boolean {
+  if (!groupType) return false;
+  return activity.suits.includes(groupType);
+}
+
+/**
+ * The itinerary we would build for them if they asked us to. Used for the
+ * "I have no idea, plan it for me" path and for the recommend shortcut.
+ */
+export function recommendFor(
+  activities: Activity[],
+  styles: TripStyle[],
+  party: Party,
+  nights: number,
+): Activity[] {
+  // Roughly one significant activity per day, leaving space to do nothing.
+  const target = Math.max(1, Math.min(activities.length, Math.round(nights * 0.7)));
+  const ranked = sortForParty(activities, styles, party);
+  const chosen: Activity[] = [];
+  let hours = 0;
+  for (const a of ranked) {
+    if (chosen.length >= target) break;
+    // Do not stack three all day trips on a four night stay.
+    if (a.durationHours >= 8 && hours >= nights * 4) continue;
+    chosen.push(a);
+    hours += a.durationHours;
+  }
+  return chosen;
 }

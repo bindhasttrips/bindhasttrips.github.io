@@ -4,8 +4,23 @@ import { estimateTrip, ESTIMATE_SPREAD } from './estimate.ts';
 import { roundEstimate } from './format.ts';
 import { getDestination } from '../config/destinations.ts';
 
-const dubai = getDestination('dubai')!;
+const dubai = getDestination('uae')!;
 const thailand = getDestination('thailand')!;
+
+/**
+ * Live config prices are deliberately null while the rate card is being
+ * built, so activity maths is tested against a fixture with known numbers
+ * rather than against whatever is in config today.
+ */
+const priced = {
+  ...dubai,
+  activities: [
+    { ...dubai.activities[0], id: 'paid-adult-child', indicativePrice: 3200, childPrice: 2600 },
+    { ...dubai.activities[1], id: 'paid-flat', indicativePrice: 3800, childPrice: undefined },
+    { ...dubai.activities[2], id: 'free-thing', indicativePrice: 0, childPrice: 0 },
+    { ...dubai.activities[3], id: 'unpriced-thing', indicativePrice: null, childPrice: null },
+  ],
+};
 
 const base = {
   destination: dubai,
@@ -46,21 +61,41 @@ test('children are charged less than adults for land', () => {
 });
 
 test('child activity pricing is applied where it differs', () => {
-  // Desert safari: 3200 adult, 2600 child.
   const withActivity = estimateTrip({
     ...base,
+    destination: priced,
     adults: 1,
     children: 1,
-    activityIds: ['desert-safari'],
+    activityIds: ['paid-adult-child'],
   });
-  const without = estimateTrip({ ...base, adults: 1, children: 1 });
+  const without = estimateTrip({ ...base, destination: priced, adults: 1, children: 1 });
   assert.equal(withActivity.activityTotal, 3200 + 2600);
   assert.ok(withActivity.land.low > without.land.low);
 });
 
+test('a null price is excluded from the total and counted instead', () => {
+  const e = estimateTrip({
+    ...base,
+    destination: priced,
+    adults: 2,
+    activityIds: ['paid-flat', 'unpriced-thing'],
+  });
+  assert.equal(e.activityTotal, 3800 * 2, 'only the priced one counts');
+  assert.equal(e.unpricedActivities, 1);
+  assert.deepEqual(e.unknownActivityIds, []);
+});
+
+test('an unpriced activity never silently costs zero', () => {
+  const withUnpriced = estimateTrip({ ...base, destination: priced, activityIds: ['unpriced-thing'] });
+  const withNothing = estimateTrip({ ...base, destination: priced, activityIds: [] });
+  assert.equal(withUnpriced.total.low, withNothing.total.low);
+  assert.equal(withUnpriced.unpricedActivities, 1);
+  assert.equal(withNothing.unpricedActivities, 0);
+});
+
 test('activities scale with the number of travellers', () => {
-  const one = estimateTrip({ ...base, adults: 1, activityIds: ['burj-khalifa'] });
-  const three = estimateTrip({ ...base, adults: 3, activityIds: ['burj-khalifa'] });
+  const one = estimateTrip({ ...base, destination: priced, adults: 1, activityIds: ['paid-flat'] });
+  const three = estimateTrip({ ...base, destination: priced, adults: 3, activityIds: ['paid-flat'] });
   assert.equal(one.activityTotal, 3800);
   assert.equal(three.activityTotal, 3800 * 3);
 });
@@ -86,7 +121,11 @@ test('per person figures divide the total by the head count', () => {
 });
 
 test('unknown activity ids are reported and not silently priced', () => {
-  const e = estimateTrip({ ...base, activityIds: ['desert-safari', 'not-a-real-activity'] });
+  const e = estimateTrip({
+    ...base,
+    destination: priced,
+    activityIds: ['paid-adult-child', 'not-a-real-activity'],
+  });
   assert.deepEqual(e.unknownActivityIds, ['not-a-real-activity']);
   assert.equal(e.activityTotal, 3200 * 2);
 });
@@ -129,10 +168,11 @@ test('a solo senior still prices as one traveller', () => {
 });
 
 test('free activities add nothing to the total', () => {
-  const withFree = estimateTrip({ ...base, activityIds: ['la-mer-beach'] });
-  const without = estimateTrip({ ...base, activityIds: [] });
+  const withFree = estimateTrip({ ...base, destination: priced, activityIds: ['free-thing'] });
+  const without = estimateTrip({ ...base, destination: priced, activityIds: [] });
   assert.equal(withFree.activityTotal, 0);
   assert.equal(withFree.total.low, without.total.low);
+  assert.equal(withFree.unpricedActivities, 0, 'zero is a price, null is not');
 });
 
 test('a more expensive stay raises the land cost but not the flights', () => {
@@ -144,8 +184,8 @@ test('a more expensive stay raises the land cost but not the flights', () => {
 });
 
 test('stay choice does not change activity pricing', () => {
-  const a = estimateTrip({ ...base, stayMultiplier: 0.78, activityIds: ['desert-safari'] });
-  const b = estimateTrip({ ...base, stayMultiplier: 1.45, activityIds: ['desert-safari'] });
+  const a = estimateTrip({ ...base, destination: priced, stayMultiplier: 0.78, activityIds: ['paid-flat'] });
+  const b = estimateTrip({ ...base, destination: priced, stayMultiplier: 1.45, activityIds: ['paid-flat'] });
   assert.equal(a.activityTotal, b.activityTotal);
 });
 

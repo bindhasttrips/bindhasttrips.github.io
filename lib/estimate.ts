@@ -42,6 +42,8 @@ export interface Estimate {
   total: Range;
   perPerson: Range;
   activityTotal: number;
+  /** Selected activities with no price set yet. Quoted separately. */
+  unpricedActivities: number;
   unknownActivityIds: string[];
 }
 
@@ -74,13 +76,20 @@ export function estimateTrip(input: EstimateInput): Estimate {
   // Visa handling, arrival transfers, insurance. Charged per head.
   const fixed = pricing.fixedPerPersonInr * travellers;
 
-  // Activities. Children are charged childPrice where one is set.
+  // Activities. A null price means "not priced yet": it is excluded from the
+  // total and counted, so the customer can be told plainly that those lines
+  // are quoted separately rather than shown a number that is quietly wrong.
   const unknownActivityIds: string[] = [];
   let activityTotal = 0;
+  let unpricedActivities = 0;
   for (const id of input.activityIds) {
     const activity = destination.activities.find((a) => a.id === id);
     if (!activity) {
       unknownActivityIds.push(id);
+      continue;
+    }
+    if (activity.indicativePrice == null) {
+      unpricedActivities += 1;
       continue;
     }
     activityTotal += activity.indicativePrice * adults;
@@ -119,6 +128,7 @@ export function estimateTrip(input: EstimateInput): Estimate {
       high: roundEstimate(total.high / travellers),
     },
     activityTotal,
+    unpricedActivities,
     unknownActivityIds,
   };
 }

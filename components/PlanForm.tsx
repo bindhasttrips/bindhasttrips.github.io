@@ -3,17 +3,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { liveDestinations, getDestination, getTier } from '@/config/destinations';
-import { TRIP_STYLES, type Activity, type TripStyle } from '@/config/types';
+import { TRIP_STYLES, GROUP_TYPES, type Activity, type Destination, type GroupType, type TripStyle } from '@/config/types';
 import { STAY_TYPES, NIGHTLY_BUDGETS, TOTAL_BUDGETS, stayById } from '@/config/stay';
-import { site, SHOW_ACTIVITY_PRICES } from '@/config/site';
+import { site, whatsappLink } from '@/config/site';
 import { estimateTrip } from '@/lib/estimate';
 import { allocateNights, daysFromNights } from '@/lib/itinerary';
 import { formatInr, formatInrRange } from '@/lib/format';
 import { asset } from '@/lib/asset';
-import { sortForParty, matchesStyles, type Party } from '@/lib/suggest';
-import { submitInquiry, normaliseIndianMobile, type SubmitResult } from '@/lib/inquiry';
+import { sortForParty, matchesStyles, recommendFor, type Party } from '@/lib/suggest';
+import ActivityCard from '@/components/ActivityCard';
+import { submitInquiry, fetchEditablePlan, normaliseIndianMobile, type SubmitResult } from '@/lib/inquiry';
 
-const STORAGE_KEY = 'bindhast-plan-v3';
+const STORAGE_KEY = 'bindhast-plan-v4';
 const MIN_NIGHTS = 2;
 const MAX_NIGHTS = 21;
 
@@ -24,6 +25,8 @@ const MONTH_NAMES = [
 
 interface FormState {
   destination: string;
+  groupType: GroupType | '';
+  flyingFrom: string;
   travelMonth: number;
   travelYear: number;
   datesFlexible: boolean;
@@ -37,6 +40,8 @@ interface FormState {
   nightlyBudget: string;
   styles: TripStyle[];
   activities: string[];
+  /** Cities where they asked us to plan it for them. */
+  helpCities: string[];
   budgetBand: string;
   name: string;
   phone: string;
@@ -45,15 +50,29 @@ interface FormState {
 }
 
 type StepId =
-  | 'destination' | 'when' | 'length' | 'who' | 'cities'
+  | 'destination' | 'group' | 'when' | 'length' | 'who' | 'origin' | 'cities'
   | 'stay' | 'style' | 'budget' | 'review' | 'contact'
   | `activities:${string}`;
+
+/** "November 2026" back into its parts, for prefilling an edit. */
+function monthFromLabel(label?: string): number | undefined {
+  if (!label) return undefined;
+  const i = MONTH_NAMES.findIndex((m) => label.startsWith(m));
+  return i === -1 ? undefined : i + 1;
+}
+
+function yearFromLabel(label?: string): number | undefined {
+  const m = label?.match(/\b(20\d{2})\b/);
+  return m ? Number(m[1]) : undefined;
+}
 
 function initial(): FormState {
   const d = new Date();
   const next = new Date(d.getFullYear(), d.getMonth() + 2, 1);
   return {
     destination: '',
+    groupType: '',
+    flyingFrom: '',
     travelMonth: next.getMonth() + 1,
     travelYear: next.getFullYear(),
     datesFlexible: true,
@@ -67,6 +86,7 @@ function initial(): FormState {
     nightlyBudget: '',
     styles: [],
     activities: [],
+    helpCities: [],
     budgetBand: '',
     name: '',
     phone: '',
@@ -83,6 +103,8 @@ export default function PlanForm() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [onlyRecommended, setOnlyRecommended] = useState(true);
+  const [editToken, setEditToken] = useState('');
+  const [editState, setEditState] = useState<'none' | 'loading' | 'editing' | 'locked' | 'missing'>('none');
 
   useEffect(() => {
     let saved: Partial<FormState> = {};
@@ -98,6 +120,7 @@ export default function PlanForm() {
       base.destination = qDest;
       base.cities = [];
       base.activities = [];
+      base.helpCities = [];
     } else if (qDest) {
       base.destination = qDest;
     }
@@ -110,19 +133,66 @@ export default function PlanForm() {
     setForm(base);
   }, [params]);
 
+  // ?e=<token> means an existing customer is changing their own plan. Their
+  // saved answers come from the sheet, never from this browser.
+  useEffect(() => {
+    const e = params.get('e');
+    if (!e) return;
+    setEditState('loading');
+    setEditToken(e);
+    fetchEditablePlan(e).then((plan) => {
+      if (!plan.ok) {
+        setEditState(plan.error === 'locked' ? 'locked' : 'missing');
+        return;
+      }
+      const dest = liveDestinations.find((d) => d.name === plan.destination);
+      setForm((f) => ({
+        ...(f ?? initial()),
+        destination: dest?.slug ?? f?.destination ?? '',
+        groupType: (plan.groupType as GroupType) || '',
+        flyingFrom: plan.flyingFrom ?? '',
+        travelMonth: monthFromLabel(plan.travelMonth) ?? f?.travelMonth ?? 1,
+        travelYear: yearFromLabel(plan.travelMonth) ?? f?.travelYear ?? new Date().getFullYear(),
+        datesFlexible: plan.datesFlexible ?? true,
+        nights: plan.nights || f?.nights || 5,
+        adults: plan.adults ?? 2,
+        children: plan.children ?? 0,
+        childAges: plan.childAges ?? '',
+        seniors: plan.seniors ?? 0,
+        cities: plan.cities ?? [],
+        stayType: STAY_TYPES.find((s) => s.label === plan.stayType)?.id ?? 'hotel4',
+        nightlyBudget: plan.nightlyBudget ?? '',
+        styles: (plan.styles ?? []) as TripStyle[],
+        activities: plan.activityIds ?? [],
+        helpCities: plan.helpCities ?? [],
+        budgetBand: plan.budgetBand ?? '',
+        name: plan.name ?? '',
+        phone: plan.phone ?? '',
+        email: plan.email ?? '',
+        notes: plan.notes ?? '',
+      }));
+      setEditState('editing');
+    });
+  }, [params]);
+
   useEffect(() => {
     if (!form) return;
+    // An edit session must not be polluted by a half finished plan left in
+    // this browser from someone else's enquiry.
+    if (editState === 'editing' || editState === 'loading') return;
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(form));
     } catch {
       // Not worth breaking the form over.
     }
-  }, [form]);
+  }, [form, editState]);
 
   const destination = form ? getDestination(form.destination) : undefined;
 
   const steps: StepId[] = useMemo(() => {
-    const s: StepId[] = ['destination', 'when', 'length', 'who', 'cities', 'stay', 'style'];
+    const s: StepId[] = [
+      'destination', 'group', 'when', 'length', 'who', 'origin', 'cities', 'stay', 'style',
+    ];
     if (form) for (const c of form.cities) s.push(`activities:${c}` as StepId);
     s.push('budget', 'review', 'contact');
     return s;
@@ -150,7 +220,12 @@ export default function PlanForm() {
   if (!form) return null;
 
   const step = steps[Math.min(stepIndex, steps.length - 1)];
-  const party: Party = { adults: form.adults, children: form.children, seniors: form.seniors };
+  const party: Party = {
+    adults: form.adults,
+    children: form.children,
+    seniors: form.seniors,
+    groupType: form.groupType || undefined,
+  };
 
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -163,6 +238,8 @@ export default function PlanForm() {
 
   function validate(): string {
     if (step === 'destination' && !destination) return 'Pick a destination to continue.';
+    if (step === 'group' && !form!.groupType) return 'Let us know who is travelling with you.';
+    if (step === 'origin' && !form!.flyingFrom.trim()) return 'Tell us which city you will fly from.';
     if (step === 'cities' && form!.cities.length === 0) return 'Pick at least one city.';
     if (step === 'stay' && !form!.nightlyBudget) return 'Pick a nightly budget, or choose "Not sure".';
     if (step === 'style' && form!.styles.length === 0) return 'Pick at least one, so we know what to suggest.';
@@ -192,6 +269,9 @@ export default function PlanForm() {
     const phone = normaliseIndianMobile(form!.phone);
     if (!form!.name.trim()) return setError('Please enter your name.');
     if (!phone) return setError('Enter a 10 digit Indian mobile number.');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form!.email.trim())) {
+      return setError('Enter an email address so we can send you a copy.');
+    }
     setError('');
     setSubmitting(true);
 
@@ -200,16 +280,22 @@ export default function PlanForm() {
         .map((id) => destination!.activities.find((a) => a.id === id))
         .filter((a): a is Activity => Boolean(a) && a!.city === c.city)
         .map((a) => a.name);
-      return `${c.city}, ${c.nights} ${c.nights === 1 ? 'night' : 'nights'}: ${
-        names.length ? names.join('; ') : 'nothing chosen'
-      }`;
+      const label = form!.helpCities.includes(c.city)
+        ? 'ASKED US TO PLAN THIS'
+        : names.length
+          ? names.join('; ')
+          : 'nothing chosen';
+      return `${c.city}, ${c.nights} ${c.nights === 1 ? 'night' : 'nights'}: ${label}`;
     });
 
     const res = await submitInquiry({
+      ...(editToken ? { action: 'update' as const, editToken } : {}),
       name: form!.name.trim(),
       phone,
       email: form!.email.trim(),
+      flyingFrom: form!.flyingFrom.trim(),
       destination: destination!.name,
+      groupType: form!.groupType || '',
       travelMonth: `${MONTH_NAMES[form!.travelMonth - 1]} ${form!.travelYear}`,
       datesFlexible: form!.datesFlexible,
       nights: form!.nights,
@@ -225,8 +311,11 @@ export default function PlanForm() {
       activities: form!.activities.map(
         (id) => destination!.activities.find((a) => a.id === id)?.name ?? id,
       ),
+      activityIds: form!.activities,
+      helpCities: form!.helpCities,
       itinerary: byCity.join(' | '),
       activityTotal: estimate?.activityTotal ?? 0,
+      unpricedActivities: estimate?.unpricedActivities ?? 0,
       budgetBand: form!.budgetBand,
       estimateLow: estimate?.total.low ?? 0,
       estimateHigh: estimate?.total.high ?? 0,
@@ -253,8 +342,45 @@ export default function PlanForm() {
   const isActivityStep = step.startsWith('activities:');
   const activityCity = isActivityStep ? step.slice('activities:'.length) : '';
 
+  if (editState === 'loading') {
+    return (
+      <div className="wrap max-w-2xl py-16">
+        <p className="text-[15px] text-ink-500">Loading your plan.</p>
+      </div>
+    );
+  }
+
+  if (editState === 'locked' || editState === 'missing') {
+    return (
+      <div className="wrap max-w-2xl py-16">
+        <h1 className="text-2xl">
+          {editState === 'locked' ? 'This plan is now confirmed' : 'We could not open that link'}
+        </h1>
+        <p className="mt-3 text-[16px] leading-relaxed text-ink-700">
+          {editState === 'locked'
+            ? 'Your trip has moved past the point where it can be changed online, because we have started booking it. Message us and we will make the change by hand.'
+            : 'The link may be incomplete or it may have been replaced. Message us and we will send a fresh one.'}
+        </p>
+        <a
+          href={whatsappLink('Hello, I would like to change something about my trip.')}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-wa mt-7 w-full sm:w-auto"
+        >
+          Message us
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className="wrap max-w-2xl pb-24 pt-6">
+      {editState === 'editing' && (
+        <p className="mb-5 rounded-xl bg-sea-100 p-4 text-[15px] leading-relaxed text-ink-700">
+          <strong className="font-semibold">You are changing your existing plan.</strong>{' '}
+          Everything is filled in as you left it. Adjust whatever you like and send it again.
+        </p>
+      )}
       <Progress index={stepIndex} total={steps.length} />
 
       {step === 'destination' && (
@@ -278,6 +404,25 @@ export default function PlanForm() {
             Malaysia, Singapore and Vietnam are not open yet. Message us if you want one of
             those and we will tell you when they are.
           </Note>
+        </Step>
+      )}
+
+      {step === 'group' && (
+        <Step
+          title="Who are you travelling with?"
+          subtitle="This matters more than anything else you tell us. It decides the pace, the hotels and what we put in front of you."
+        >
+          <div className="grid gap-3">
+            {GROUP_TYPES.map((g) => (
+              <Choice
+                key={g.id}
+                selected={form.groupType === g.id}
+                onClick={() => set('groupType', g.id)}
+                title={g.label}
+                subtitle={g.hint}
+              />
+            ))}
+          </div>
         </Step>
       )}
 
@@ -398,6 +543,45 @@ export default function PlanForm() {
         </Step>
       )}
 
+      {step === 'origin' && (
+        <Step
+          title="Which city will you fly from?"
+          subtitle="Fares vary a lot by departure city, so this changes the number we quote you."
+        >
+          <Field label="Your city">
+            <input
+              className="input"
+              list="origin-cities"
+              placeholder="For example Mumbai"
+              value={form.flyingFrom}
+              onChange={(e) => set('flyingFrom', e.target.value)}
+            />
+          </Field>
+          <datalist id="origin-cities">
+            {['Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata', 'Pune',
+              'Ahmedabad', 'Kochi', 'Jaipur', 'Lucknow', 'Chandigarh'].map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {['Mumbai', 'Delhi', 'Bengaluru', 'Hyderabad', 'Chennai', 'Kolkata'].map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => set('flyingFrom', c)}
+                className={`min-h-[2.5rem] rounded-full border px-4 text-sm font-semibold transition-colors ${
+                  form.flyingFrom === c
+                    ? 'border-clay bg-clay text-white'
+                    : 'border-sand-300 bg-white text-ink-700 hover:bg-sand-100'
+                }`}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
+        </Step>
+      )}
+
       {step === 'cities' && destination && (
         <Step title={`Which parts of ${destination.name}?`}>
           <div className="grid gap-3">
@@ -487,18 +671,31 @@ export default function PlanForm() {
 
       {isActivityStep && destination && (
         <ActivityStep
+          destination={destination}
           city={activityCity}
           nights={nightsByCity.find((c) => c.city === activityCity)?.nights ?? 0}
           all={destination.activities.filter((a) => a.city === activityCity)}
           selected={form.activities}
           styles={form.styles}
           party={party}
+          needsHelp={form.helpCities.includes(activityCity)}
           onlyRecommended={onlyRecommended}
           setOnlyRecommended={setOnlyRecommended}
           onToggle={(id) => set('activities', toggle(form.activities, id))}
-          onAddRecommended={(ids) =>
-            set('activities', Array.from(new Set([...form.activities, ...ids])))
+          onAskForHelp={() => {
+            const ids = new Set(
+              destination.activities.filter((a) => a.city === activityCity).map((a) => a.id),
+            );
+            set('activities', form.activities.filter((id) => !ids.has(id)));
+            set('helpCities', Array.from(new Set([...form.helpCities, activityCity])));
+          }}
+          onCancelHelp={() =>
+            set('helpCities', form.helpCities.filter((c) => c !== activityCity))
           }
+          onAddRecommended={(ids) => {
+            set('helpCities', form.helpCities.filter((c) => c !== activityCity));
+            set('activities', Array.from(new Set([...form.activities, ...ids])));
+          }}
         />
       )}
 
@@ -559,7 +756,11 @@ export default function PlanForm() {
                         {c.nights} {c.nights === 1 ? 'night' : 'nights'}
                       </span>
                     </p>
-                    {picked.length > 0 ? (
+                    {form.helpCities.includes(c.city) ? (
+                      <p className="mt-1 text-[15px] text-sea">
+                        You asked us to plan this one. We will.
+                      </p>
+                    ) : picked.length > 0 ? (
                       <ul className="mt-2 space-y-1.5">
                         {picked.map((a) => (
                           <li key={a.id} className="flex gap-2 text-[15px] text-ink-700">
@@ -601,6 +802,13 @@ export default function PlanForm() {
                 {formatInrRange(estimate.flights.low, estimate.flights.high)}
               </RowLine>
             </dl>
+            {estimate.unpricedActivities > 0 && (
+              <p className="mt-4 text-[15px] leading-relaxed text-ink-700">
+                The {estimate.unpricedActivities}{' '}
+                {estimate.unpricedActivities === 1 ? 'activity' : 'activities'} you chose are
+                quoted separately and are not in the figure above.
+              </p>
+            )}
             <p className="mt-4 rounded-xl bg-sand-100 p-4 text-sm leading-relaxed text-ink-700">
               An estimate, not a quote. It moves with your exact dates, with availability, and
               with what flights cost on the day we ticket. We confirm every number with you
@@ -621,7 +829,7 @@ export default function PlanForm() {
               placeholder="9876543210" value={form.phone}
               onChange={(e) => set('phone', e.target.value)} />
           </Field>
-          <Field label="Email" hint="Optional.">
+          <Field label="Email" hint="We send you a copy of everything here.">
             <input className="input" type="email" autoComplete="email" value={form.email}
               onChange={(e) => set('email', e.target.value)} />
           </Field>
@@ -662,153 +870,160 @@ export default function PlanForm() {
 /* ---------------- activity step ---------------- */
 
 function ActivityStep({
-  city, nights, all, selected, styles, party,
-  onlyRecommended, setOnlyRecommended, onToggle, onAddRecommended,
+  destination, city, nights, all, selected, styles, party, needsHelp,
+  onlyRecommended, setOnlyRecommended, onToggle, onAskForHelp, onCancelHelp, onAddRecommended,
 }: {
+  destination: Destination;
   city: string;
   nights: number;
   all: Activity[];
   selected: string[];
   styles: TripStyle[];
   party: Party;
+  needsHelp: boolean;
   onlyRecommended: boolean;
   setOnlyRecommended: (v: boolean) => void;
   onToggle: (id: string) => void;
+  onAskForHelp: () => void;
+  onCancelHelp: () => void;
   onAddRecommended: (ids: string[]) => void;
 }) {
   const ranked = sortForParty(all, styles, party);
-  const recommended = ranked.filter((a) => matchesStyles(a, styles));
-  const showing = onlyRecommended && recommended.length >= 3 ? recommended : ranked;
+  const forYou = ranked.filter(
+    (a) => matchesStyles(a, styles) || (party.groupType && a.suits.includes(party.groupType)),
+  );
+  const showing = onlyRecommended && forYou.length >= 3 ? forYou : ranked;
   const chosenHere = all.filter((a) => selected.includes(a.id)).length;
-  const topThree = recommended.slice(0, 3).map((a) => a.id);
+  const ourPick = recommendFor(all, styles, party, Math.max(1, nights)).map((a) => a.id);
 
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-3">
-        <h1 className="text-[1.6rem] leading-tight sm:text-3xl">Things to do in {city}</h1>
-      </div>
+      <h1 className="text-[1.6rem] leading-tight sm:text-3xl">Things to do in {city}</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-ink-700">
-        {nights} {nights === 1 ? 'night' : 'nights'} here. Pick whatever appeals. Skipping all
-        of this is fine, and a free day is a perfectly good choice.
+        {nights} {nights === 1 ? 'night' : 'nights'} here. Pick whatever appeals, or let us
+        do it. Nothing is compulsory and a free day is a perfectly good choice.
       </p>
 
-      <div className="sticky top-16 z-20 -mx-5 mt-5 border-b border-sand-200 bg-sand-50/95 px-5 py-3 backdrop-blur">
-        <div className="flex items-center justify-between gap-3">
-          <div className="inline-flex rounded-full border border-sand-300 bg-white p-1">
+      {/* The "no idea" path, offered before the list rather than buried under it. */}
+      {needsHelp ? (
+        <div className="mt-5 rounded-xl2 border border-sea bg-sea-100 p-5">
+          <p className="font-semibold text-sea">We will plan {city} for you.</p>
+          <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">
+            Noted. We will put together a {city} plan for {describeGroup(party)} and walk you
+            through it on the call. Nothing is locked in.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <button type="button" onClick={onCancelHelp} className="btn-ghost h-11 min-h-0 px-4 text-sm">
+              Actually, let me pick
+            </button>
+            {ourPick.length > 0 && (
+              <button
+                type="button"
+                onClick={() => onAddRecommended(ourPick)}
+                className="btn-ghost h-11 min-h-0 px-4 text-sm"
+              >
+                Show me what you would choose
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={onAskForHelp}
+          className="mt-5 flex w-full items-start gap-3 rounded-xl2 border border-dashed border-sea bg-sea-100/60 p-4 text-left transition-colors hover:bg-sea-100"
+        >
+          <span aria-hidden className="mt-0.5 text-lg leading-none">?</span>
+          <span>
+            <span className="block font-semibold text-sea">
+              I have no idea. Plan {city} for me.
+            </span>
+            <span className="mt-0.5 block text-[14px] leading-snug text-ink-700">
+              Skip this page entirely. We will build it around {describeGroup(party)} and talk
+              you through it.
+            </span>
+          </span>
+        </button>
+      )}
+
+      {!needsHelp && (
+        <>
+          <div className="sticky top-16 z-20 -mx-5 mt-5 border-b border-sand-200 bg-sand-50/95 px-5 py-3 backdrop-blur">
+            <div className="flex items-center justify-between gap-3">
+              <div className="inline-flex rounded-full border border-sand-300 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setOnlyRecommended(true)}
+                  className={`min-h-[2.25rem] rounded-full px-4 text-sm font-semibold ${
+                    onlyRecommended ? 'bg-ink text-white' : 'text-ink-700'
+                  }`}
+                >
+                  For you
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnlyRecommended(false)}
+                  className={`min-h-[2.25rem] rounded-full px-4 text-sm font-semibold ${
+                    !onlyRecommended ? 'bg-ink text-white' : 'text-ink-700'
+                  }`}
+                >
+                  All {all.length}
+                </button>
+              </div>
+              <span className="shrink-0 text-sm font-semibold text-ink-500">
+                {chosenHere} chosen
+              </span>
+            </div>
+          </div>
+
+          {ourPick.length > 0 && chosenHere === 0 && (
             <button
               type="button"
-              onClick={() => setOnlyRecommended(true)}
-              className={`min-h-[2.25rem] rounded-full px-4 text-sm font-semibold ${
-                onlyRecommended ? 'bg-ink text-white' : 'text-ink-700'
-              }`}
+              onClick={() => onAddRecommended(ourPick)}
+              className="btn-ghost mt-4 w-full text-sm"
             >
-              For you
+              Add the {ourPick.length} we would pick for {describeGroup(party)}
             </button>
+          )}
+
+          <div className="mt-4 grid gap-3">
+            {showing.map((a) => (
+              <ActivityCard
+                key={a.id}
+                activity={a}
+                destination={destination}
+                selected={selected.includes(a.id)}
+                styles={styles}
+                groupType={party.groupType}
+                onToggle={() => onToggle(a.id)}
+              />
+            ))}
+          </div>
+
+          {onlyRecommended && forYou.length >= 3 && (
             <button
               type="button"
               onClick={() => setOnlyRecommended(false)}
-              className={`min-h-[2.25rem] rounded-full px-4 text-sm font-semibold ${
-                !onlyRecommended ? 'bg-ink text-white' : 'text-ink-700'
-              }`}
+              className="mt-4 w-full text-sm font-semibold text-sea underline underline-offset-4"
             >
-              All {all.length}
+              Show all {all.length} things to do in {city}
             </button>
-          </div>
-          <span className="shrink-0 text-sm font-semibold text-ink-500">
-            {chosenHere} chosen
-          </span>
-        </div>
-      </div>
-
-      {topThree.length === 3 && chosenHere === 0 && (
-        <button
-          type="button"
-          onClick={() => onAddRecommended(topThree)}
-          className="btn-ghost mt-4 w-full text-sm"
-        >
-          Add the three we would pick
-        </button>
-      )}
-
-      <div className="mt-4 grid gap-3">
-        {showing.map((a) => {
-          const on = selected.includes(a.id);
-          return (
-            <button
-              key={a.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => onToggle(a.id)}
-              className={`flex w-full items-start gap-3 rounded-xl2 border p-4 text-left transition-colors ${
-                on
-                  ? 'border-clay bg-clay-100 ring-1 ring-clay'
-                  : 'border-sand-300 bg-white hover:bg-sand-100'
-              }`}
-            >
-              <span
-                aria-hidden
-                className={`mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 text-sm font-bold ${
-                  on ? 'border-clay bg-clay text-white' : 'border-sand-300 bg-white text-transparent'
-                }`}
-              >
-                ✓
-              </span>
-              <span className="flex-1">
-                <span className="flex items-baseline justify-between gap-3">
-                  <span className="font-semibold leading-snug">{a.name}</span>
-                  {SHOW_ACTIVITY_PRICES && (
-                    <span className="shrink-0 text-sm font-semibold text-clay">
-                      {a.indicativePrice === 0 ? 'Free' : formatInr(a.indicativePrice)}
-                    </span>
-                  )}
-                </span>
-                <span className="mt-1 block text-[14px] leading-relaxed text-ink-700">
-                  {a.description}
-                </span>
-                <span className="mt-2 flex flex-wrap gap-1.5">
-                  <Tag>About {a.durationHours}h</Tag>
-                  {matchesStyles(a, styles) && <Tag tone="sea">Your kind of thing</Tag>}
-                  {a.audience === 'adult' && <Tag>Adults only</Tag>}
-                  {a.audience === 'kids' && <Tag>Good with children</Tag>}
-                  {a.intensity === 'high' && <Tag>Active</Tag>}
-                  {a.intensity === 'low' && <Tag>Easy going</Tag>}
-                  {a.note && <Tag>{a.note}</Tag>}
-                </span>
-                {(a.infoUrl || a.videoUrl) && (
-                  <span className="mt-2 flex gap-3 text-xs">
-                    {a.infoUrl && (
-                      <a href={a.infoUrl} target="_blank" rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="font-semibold text-sea underline underline-offset-2">
-                        More detail
-                      </a>
-                    )}
-                    {a.videoUrl && (
-                      <a href={a.videoUrl} target="_blank" rel="noopener noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        className="font-semibold text-sea underline underline-offset-2">
-                        Watch a video
-                      </a>
-                    )}
-                  </span>
-                )}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {onlyRecommended && recommended.length >= 3 && (
-        <button
-          type="button"
-          onClick={() => setOnlyRecommended(false)}
-          className="mt-4 w-full text-sm font-semibold text-sea underline underline-offset-4"
-        >
-          Show all {all.length} things to do in {city}
-        </button>
+          )}
+        </>
       )}
     </div>
   );
+}
+
+function describeGroup(party: Party) {
+  switch (party.groupType) {
+    case 'couple': return 'a couple';
+    case 'family': return 'a family with children';
+    case 'friends': return 'a group of friends';
+    case 'seniors': return 'a group including older travellers';
+    case 'solo': return 'a solo traveller';
+    default: return 'your group';
+  }
 }
 
 /* ---------------- shared pieces ---------------- */
