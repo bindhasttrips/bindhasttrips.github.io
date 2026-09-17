@@ -20,14 +20,23 @@ var SITE_URL = 'https://bindhasttrips.github.io';  // TODO: custom domain later
 var WHATSAPP_NUMBER = '919999999999';         // TODO: digits only, country code first
 
 /**
- * Key for the dashboard at /admin. Anyone holding it can read every booking.
+ * The dashboard key is NOT stored in this file. It lives in Script
+ * Properties, which belong to your Google account and are never part of the
+ * code, so this file stays safe to paste anywhere.
  *
- * NEVER COMMIT A REAL KEY HERE. This repository is public, so a key in this
- * file is a key on the internet. Set the real value in the Apps Script
- * editor, which is private to your Google account, and leave this placeholder
- * in the repository copy.
+ * Set it once from the spreadsheet: Bindhast > Set dashboard key.
  */
-var ADMIN_KEY = 'SET-THIS-IN-THE-APPS-SCRIPT-EDITOR-ONLY';
+function getAdminKey() {
+  return PropertiesService.getScriptProperties().getProperty('ADMIN_KEY') || '';
+}
+
+/** Columns the dashboard is allowed to write. Nothing else is touchable. */
+var WRITABLE = [
+  'status', 'quotedTotal', 'depositDue', 'amountPaid', 'paymentLink', 'paymentStatus',
+  'stage_payment', 'stage_visa_submitted', 'stage_visa_approved',
+  'stage_flights', 'stage_hotels', 'stage_vouchers',
+  'allowEdit', 'revoked', 'ownerNotes'
+];
 
 var STAGES = [
   ['stage_payment', 'Deposit received'],
@@ -62,6 +71,7 @@ function doPost(e) {
     if (!e || !e.postData || !e.postData.contents) return json({ ok: false });
     var body = JSON.parse(e.postData.contents);
 
+    if (body.action === 'admin-update') return handleAdminUpdate(body);
     if (body.action === 'update') return handleCustomerUpdate(body);
     if (body.action === 'custom') return handleCustomRequest(body);
     return handleNewInquiry(body);
@@ -95,6 +105,59 @@ function handleNewInquiry(b) {
   emailCustomer(b, token, editToken);
   emailOwner(b, token);
   return json({ ok: true, token: token, editToken: editToken });
+}
+
+/**
+ * A write from the dashboard. Guarded by the same key, and restricted to the
+ * WRITABLE columns, so a tampered request cannot rewrite a customer's answers
+ * or hand itself someone else's token.
+ */
+function handleAdminUpdate(b) {
+  var adminKey = getAdminKey();
+  if (!adminKey || !secureEquals(String(b.key || ''), adminKey)) {
+    logFailedLookup('admin-write');
+    return json({ ok: false, error: 'not found' });
+  }
+
+  var sheet = b.sheet === 'custom'
+    ? SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CUSTOM_SHEET)
+    : getSheet();
+  if (!sheet) return json({ ok: false, error: 'no sheet' });
+
+  var row = toInt(b.row, 2, 100000);
+  if (row < 2 || row > sheet.getLastRow()) return json({ ok: false, error: 'bad row' });
+
+  var written = [];
+  var patch = b.patch || {};
+  for (var field in patch) {
+    if (!patch.hasOwnProperty(field)) continue;
+
+    if (b.sheet === 'custom') {
+      // The custom tab only ever takes a status or a note.
+      var customCols = { status: 2, ownerNotes: 3 };
+      if (!customCols.hasOwnProperty(field)) continue;
+      sheet.getRange(row, customCols[field]).setValue(clean(patch[field], 1000));
+      written.push(field);
+      continue;
+    }
+
+    if (WRITABLE.indexOf(field) === -1) continue;
+    var value = patch[field];
+    if (field === 'allowEdit' || field === 'revoked') {
+      value = value === true || String(value).toUpperCase() === 'TRUE';
+    } else if (field === 'quotedTotal' || field === 'depositDue' || field === 'amountPaid') {
+      value = toInt(value, 0, 100000000);
+    } else {
+      value = clean(value, 1000);
+    }
+    sheet.getRange(row, col(field) + 1).setValue(value);
+    written.push(field);
+  }
+
+  if (written.length && b.sheet !== 'custom') {
+    sheet.getRange(row, col('lastUpdated') + 1).setValue(new Date());
+  }
+  return json({ ok: true, written: written });
 }
 
 var CUSTOM_HEADERS = [
@@ -194,7 +257,8 @@ function handleCustomerUpdate(b) {
  * in constant time so the comparison cannot be timed character by character.
  */
 function adminPayload(key) {
-  if (!secureEquals(String(key), ADMIN_KEY)) {
+  var adminKey = getAdminKey();
+  if (!adminKey || !secureEquals(String(key), adminKey)) {
     logFailedLookup('admin');
     return { ok: false, error: 'not found' };
   }
@@ -530,6 +594,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Bindhast')
     .addItem('Set up this sheet', 'setupSheet')
+    .addItem('Set dashboard key', 'setDashboardKey')
     .addItem('Open custom requests', 'openCustomSheet')
     .addSeparator()
     .addItem('Allow the customer to edit (selected rows)', 'allowEditSelected')
@@ -561,6 +626,26 @@ function setupSheet() {
     'Sheet is ready.\n\nColumns A to AG are what the customer told you. ' +
     'From quotedTotal onwards is yours to work in. ' +
     'Untick allowEdit to freeze a plan so the customer can no longer change it.');
+}
+
+/** Stores the dashboard key in Script Properties, never in the code. */
+function setDashboardKey() {
+  var ui = SpreadsheetApp.getUi();
+  var current = getAdminKey();
+  var answer = ui.prompt(
+    'Dashboard key',
+    current
+      ? 'A key is already set. Enter a new one to replace it, or Cancel to keep it.'
+      : 'Choose a long random key. Anyone holding it can read every booking.',
+    ui.ButtonSet.OK_CANCEL);
+  if (answer.getSelectedButton() !== ui.Button.OK) return;
+  var key = answer.getResponseText().trim();
+  if (key.length < 16) {
+    ui.alert('Too short. Use at least 16 characters.');
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperty('ADMIN_KEY', key);
+  ui.alert('Saved. Enter this key at your /admin page. It is stored in your Google account, not in the code.');
 }
 
 function openCustomSheet() {

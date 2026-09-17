@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  fetchAdmin, urgency, num, daysAgo,
-  type AdminData, type Booking, type Stage,
+  fetchAdmin, updateBooking, urgency, num, daysAgo,
+  STATUSES, PAYMENT_STATUSES, STAGE_FIELDS, STAGE_STATES,
+  type AdminData, type Booking, type Stage, type Patch,
 } from '@/lib/admin';
 import { formatInr } from '@/lib/format';
 
@@ -208,7 +209,12 @@ export default function Dashboard() {
             </p>
           )}
           {bookings.map((b) => (
-            <BookingCard key={b.row} booking={b} whatsappNumber={data.whatsappNumber} />
+            <BookingCard
+              key={b.row}
+              booking={b}
+              adminKey={key}
+              onSaved={() => load(key)}
+            />
           ))}
         </div>
       ) : (
@@ -240,8 +246,34 @@ export default function Dashboard() {
   );
 }
 
-function BookingCard({ booking: b, whatsappNumber }: { booking: Booking; whatsappNumber: string }) {
+function BookingCard({
+  booking: b, adminKey, onSaved,
+}: {
+  booking: Booking;
+  adminKey: string;
+  onSaved: () => void;
+}) {
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState('');
+  const [failed, setFailed] = useState('');
+  // Held locally so a field does not snap back while the write is in flight.
+  const [draft, setDraft] = useState<Record<string, string>>({});
+
+  const save = async (patch: Patch, label: string) => {
+    setSaving(label);
+    setFailed('');
+    const res = await updateBooking(adminKey, b.row, patch);
+    setSaving('');
+    if (!res.ok) {
+      setFailed('Not saved. Try again.');
+      return;
+    }
+    onSaved();
+  };
+
+  const field = (name: string, fallback: string | number) =>
+    draft[name] ?? String(fallback ?? '');
+
   const owed = num(b.quotedTotal) - num(b.amountPaid);
   const age = daysAgo(b.timestamp);
   const tone = STATUS_TONE[String(b.status).toLowerCase()] ?? 'bg-sand-100 text-ink-700';
@@ -255,9 +287,18 @@ function BookingCard({ booking: b, whatsappNumber }: { booking: Booking; whatsap
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-semibold">{b.name || 'No name'}</h2>
-              <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${tone}`}>
-                {b.status}
-              </span>
+              <select
+                value={String(b.status)}
+                onChange={(e) => save({ status: e.target.value }, 'status')}
+                aria-label="Status"
+                className={`cursor-pointer rounded-full border-0 px-2.5 py-1 text-xs font-semibold ${tone}`}
+              >
+                {STATUSES.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              {saving && <span className="text-xs text-ink-500">saving {saving}</span>}
+              {failed && <span className="text-xs font-semibold text-clay">{failed}</span>}
               {b.helpCities && (
                 <span className="rounded-full bg-sea-100 px-2.5 py-1 text-xs font-semibold text-sea">
                   wants help planning
@@ -313,38 +354,132 @@ function BookingCard({ booking: b, whatsappNumber }: { booking: Booking; whatsap
       </div>
 
       {open && (
-        <dl className="grid gap-x-8 gap-y-3 border-t border-sand-200 bg-sand-50 p-5 text-[15px] sm:grid-cols-2">
-          <Detail label="Phone">{b.phone}</Detail>
-          <Detail label="Email">{b.email}</Detail>
-          <Detail label="Party">
-            {`${b.adults} adults, ${b.children} children, ${b.seniors} seniors`}
-          </Detail>
-          <Detail label="Dates">{`${b.travelMonth} (${b.datesFlexible})`}</Detail>
-          <Detail label="Stay">{b.stayType}</Detail>
-          <Detail label="Budget">{b.budget}</Detail>
-          <Detail label="Style">{b.styles}</Detail>
-          <Detail label="Estimate shown">
-            {num(b.estimateLow) > 0
-              ? `${formatInr(num(b.estimateLow))} to ${formatInr(num(b.estimateHigh))}`
-              : ''}
-          </Detail>
-          <div className="sm:col-span-2">
-            <Detail label={`Activities (${b.activityCount})`}>{b.activities}</Detail>
-          </div>
-          <div className="sm:col-span-2">
-            <Detail label="Itinerary">{b.itinerary}</Detail>
-          </div>
-          {b.notes && (
+        <div className="border-t border-sand-200 bg-sand-50 p-5">
+          <dl className="grid gap-x-8 gap-y-3 text-[15px] sm:grid-cols-2">
+            <Detail label="Phone">{b.phone}</Detail>
+            <Detail label="Email">{b.email}</Detail>
+            <Detail label="Party">
+              {`${b.adults} adults, ${b.children} children, ${b.seniors} seniors`}
+            </Detail>
+            <Detail label="Dates">{`${b.travelMonth} (${b.datesFlexible})`}</Detail>
+            <Detail label="Stay">{b.stayType}</Detail>
+            <Detail label="Budget">{b.budget}</Detail>
+            <Detail label="Style">{b.styles}</Detail>
+            <Detail label="Flying from">{b.flyingFrom}</Detail>
             <div className="sm:col-span-2">
-              <Detail label="Their notes">{b.notes}</Detail>
+              <Detail label={`Activities (${b.activityCount})`}>{b.activities}</Detail>
             </div>
-          )}
-          {b.ownerNotes && (
             <div className="sm:col-span-2">
-              <Detail label="Your notes">{b.ownerNotes}</Detail>
+              <Detail label="Itinerary">{b.itinerary}</Detail>
             </div>
-          )}
-        </dl>
+            {b.notes && (
+              <div className="sm:col-span-2">
+                <Detail label="Their notes">{b.notes}</Detail>
+              </div>
+            )}
+          </dl>
+
+          <div className="mt-6 border-t border-sand-200 pt-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+              Booking stages
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {STAGE_FIELDS.map(([fieldName, label], i) => (
+                <label key={fieldName} className="block">
+                  <span className="text-sm text-ink-700">{label}</span>
+                  <select
+                    className="input mt-1 h-10 min-h-0 text-sm"
+                    value={b.stages[i]?.state ?? 'pending'}
+                    onChange={(e) => save({ [fieldName]: e.target.value }, label.toLowerCase())}
+                  >
+                    {STAGE_STATES.map((st) => (
+                      <option key={st} value={st}>{st.replace('_', ' ')}</option>
+                    ))}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-6 border-t border-sand-200 pt-5">
+            <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">Money</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="block">
+                <span className="text-sm text-ink-700">Quoted total</span>
+                <input
+                  className="input mt-1 h-10 min-h-0 text-sm"
+                  inputMode="numeric"
+                  value={field('quotedTotal', b.quotedTotal)}
+                  onChange={(e) => setDraft((d) => ({ ...d, quotedTotal: e.target.value }))}
+                  onBlur={(e) => e.target.value !== String(b.quotedTotal ?? '')
+                    && save({ quotedTotal: e.target.value }, 'quote')}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-ink-700">Amount paid</span>
+                <input
+                  className="input mt-1 h-10 min-h-0 text-sm"
+                  inputMode="numeric"
+                  value={field('amountPaid', b.amountPaid)}
+                  onChange={(e) => setDraft((d) => ({ ...d, amountPaid: e.target.value }))}
+                  onBlur={(e) => e.target.value !== String(b.amountPaid ?? '')
+                    && save({ amountPaid: e.target.value }, 'payment')}
+                />
+              </label>
+              <label className="block">
+                <span className="text-sm text-ink-700">Payment status</span>
+                <select
+                  className="input mt-1 h-10 min-h-0 text-sm"
+                  value={String(b.paymentStatus || 'not started')}
+                  onChange={(e) => save({ paymentStatus: e.target.value }, 'payment status')}
+                >
+                  {PAYMENT_STATUSES.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label className="mt-3 block">
+              <span className="text-sm text-ink-700">Payment link</span>
+              <input
+                className="input mt-1 h-10 min-h-0 text-sm"
+                placeholder="Paste the Razorpay link"
+                value={field('paymentLink', b.paymentLink)}
+                onChange={(e) => setDraft((d) => ({ ...d, paymentLink: e.target.value }))}
+                onBlur={(e) => e.target.value !== String(b.paymentLink ?? '')
+                  && save({ paymentLink: e.target.value }, 'link')}
+              />
+            </label>
+          </div>
+
+          <div className="mt-6 border-t border-sand-200 pt-5">
+            <label className="block">
+              <span className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+                Your notes
+              </span>
+              <textarea
+                className="input mt-2 min-h-20 py-2 text-sm"
+                rows={2}
+                value={field('ownerNotes', b.ownerNotes)}
+                onChange={(e) => setDraft((d) => ({ ...d, ownerNotes: e.target.value }))}
+                onBlur={(e) => e.target.value !== String(b.ownerNotes ?? '')
+                  && save({ ownerNotes: e.target.value }, 'notes')}
+              />
+            </label>
+
+            <label className="mt-4 flex items-center gap-3">
+              <input
+                type="checkbox"
+                className="h-5 w-5 accent-[#C4551F]"
+                checked={b.allowEdit}
+                onChange={(e) => save({ allowEdit: e.target.checked }, 'lock')}
+              />
+              <span className="text-sm text-ink-700">
+                Customer can still change their plan
+              </span>
+            </label>
+          </div>
+        </div>
       )}
     </article>
   );

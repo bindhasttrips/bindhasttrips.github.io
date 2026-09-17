@@ -116,3 +116,51 @@ export function daysAgo(iso: string): number | null {
   if (Number.isNaN(t)) return null;
   return Math.floor((Date.now() - t) / 86400000);
 }
+
+export type Patch = Record<string, string | number | boolean>;
+
+/**
+ * Writes a change back to the sheet. The script only accepts an allowlist of
+ * columns, so a bad field here is ignored rather than corrupting a row.
+ */
+export async function updateBooking(
+  key: string,
+  row: number,
+  patch: Patch,
+  sheet: 'bookings' | 'custom' = 'bookings',
+): Promise<{ ok: boolean; error?: string }> {
+  if (!APPS_SCRIPT_URL) return { ok: false, error: 'not-configured' };
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      // text/plain keeps this a CORS simple request, so no preflight.
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'admin-update', key, row, patch, sheet }),
+      redirect: 'follow',
+    });
+    if (!res.ok) return { ok: false, error: `server ${res.status}` };
+    const body = (await res.json()) as { ok?: boolean };
+    return { ok: Boolean(body?.ok) };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'network' };
+  }
+}
+
+export const STATUSES = [
+  'new', 'contacted', 'quoted', 'deposit sent', 'booked', 'travelling', 'completed', 'lost',
+];
+
+export const PAYMENT_STATUSES = [
+  'not started', 'link sent', 'deposit paid', 'part paid', 'paid in full', 'refunded',
+];
+
+export const STAGE_FIELDS = [
+  ['stage_payment', 'Payment'],
+  ['stage_visa_submitted', 'Visa sent'],
+  ['stage_visa_approved', 'Visa done'],
+  ['stage_flights', 'Flights'],
+  ['stage_hotels', 'Hotels'],
+  ['stage_vouchers', 'Vouchers'],
+] as const;
+
+export const STAGE_STATES = ['pending', 'in_progress', 'done', 'blocked'] as const;
