@@ -129,3 +129,32 @@ export function normaliseIndianMobile(raw: string): string | null {
       : digits;
   return /^[6-9]\d{9}$/.test(trimmed) ? trimmed : null;
 }
+
+export interface CustomRequestPayload {
+  action: 'custom';
+  type: string;
+  name: string;
+  phone: string;
+  email: string;
+  requirement: string;
+  source: string;
+}
+
+/** The short landing page form. Writes to its own tab in the sheet. */
+export async function submitCustomRequest(
+  payload: CustomRequestPayload,
+): Promise<SubmitResult> {
+  if (!APPS_SCRIPT_URL) return { status: 'not-configured' };
+  try {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      redirect: 'follow',
+    });
+    if (!res.ok) return { status: 'failed', message: `Server returned ${res.status}` };
+    return { status: 'sent' };
+  } catch (err) {
+    return { status: 'failed', message: err instanceof Error ? err.message : 'Network error' };
+  }
+}

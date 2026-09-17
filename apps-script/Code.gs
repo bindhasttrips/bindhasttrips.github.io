@@ -13,6 +13,7 @@
  */
 
 var SHEET = 'Inquiries';
+var CUSTOM_SHEET = 'Custom requests';
 var NOTIFY_EMAIL = 'deepghuge09@gmail.com';   // TODO: where lead alerts go
 var BUSINESS_NAME = 'Bindhast Trips';
 var SITE_URL = 'https://bindhasttrips.github.io';  // TODO: custom domain later
@@ -52,6 +53,7 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
 
     if (body.action === 'update') return handleCustomerUpdate(body);
+    if (body.action === 'custom') return handleCustomRequest(body);
     return handleNewInquiry(body);
   } catch (err) {
     console.error('doPost: ' + err + '\n' + (err && err.stack));
@@ -82,6 +84,55 @@ function handleNewInquiry(b) {
   emailCustomer(b, token, editToken);
   emailOwner(b, token);
   return json({ ok: true, token: token, editToken: editToken });
+}
+
+var CUSTOM_HEADERS = [
+  'timestamp', 'status', 'ownerNotes',
+  'type', 'name', 'phone', 'email', 'requirement', 'source'
+];
+
+/**
+ * The short "custom trip or visa help" form on the landing page. Its own tab,
+ * because these are a different kind of lead and you work them differently.
+ */
+function handleCustomRequest(b) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CUSTOM_SHEET);
+  if (!sheet) {
+    sheet = ss.insertSheet(CUSTOM_SHEET);
+    sheet.appendRow(CUSTOM_HEADERS);
+    sheet.setFrozenRows(1);
+    var rule = SpreadsheetApp.newDataValidation()
+      .requireValueInList(['new', 'contacted', 'quoted', 'converted', 'lost'], true)
+      .setAllowInvalid(false).build();
+    sheet.getRange(2, 2, Math.max(1, sheet.getMaxRows() - 1), 1).setDataValidation(rule);
+  }
+
+  sheet.appendRow([
+    new Date(),
+    'new',
+    '',
+    clean(b.type, 60),
+    clean(b.name, 120),
+    clean(b.phone, 20),
+    clean(b.email, 160),
+    clean(b.requirement, 2000),
+    clean(b.source, 300)
+  ]);
+
+  if (NOTIFY_EMAIL) {
+    MailApp.sendEmail(NOTIFY_EMAIL,
+      'Enquiry: ' + clean(b.type, 60) + ' from ' + clean(b.name, 60),
+      [
+        clean(b.name, 120),
+        clean(b.phone, 20) + '   ' + clean(b.email, 160),
+        '',
+        'Type: ' + clean(b.type, 60),
+        '',
+        clean(b.requirement, 2000)
+      ].join('\n'));
+  }
+  return json({ ok: true });
 }
 
 /**
@@ -373,6 +424,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('Bindhast')
     .addItem('Set up this sheet', 'setupSheet')
+    .addItem('Open custom requests', 'openCustomSheet')
     .addSeparator()
     .addItem('Allow the customer to edit (selected rows)', 'allowEditSelected')
     .addItem('Freeze the plan (selected rows)', 'freezeSelected')
@@ -403,6 +455,17 @@ function setupSheet() {
     'Sheet is ready.\n\nColumns A to AG are what the customer told you. ' +
     'From quotedTotal onwards is yours to work in. ' +
     'Untick allowEdit to freeze a plan so the customer can no longer change it.');
+}
+
+function openCustomSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(CUSTOM_SHEET);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert(
+      'No custom requests yet. The tab is created automatically the first time someone uses the short form on the landing page.');
+    return;
+  }
+  ss.setActiveSheet(sheet);
 }
 
 function applyList(sheet, name, values) {

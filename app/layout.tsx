@@ -19,13 +19,13 @@ export const metadata: Metadata = {
     template: `%s · ${site.name}`,
   },
   description:
-    'A small travel agency for Indians travelling abroad. Visa, flights, hotels, transfers and activities, handled end to end by one person you can actually reach. Dubai and Thailand.',
+    'A travel agency for Indians travelling abroad. Visa, flights, hotels, transfers and activities, handled end to end and arranged as a single booking. The UAE and Thailand.',
   openGraph: {
     type: 'website',
     siteName: site.name,
     title: `${site.name}. ${site.tagline}`,
     description:
-      'Visa, flights, hotels, transfers and activities for your trip abroad. One price, one person to call.',
+      'Visa, flights, hotels, transfers and activities for your trip abroad. One price, one point of contact.',
   },
 };
 

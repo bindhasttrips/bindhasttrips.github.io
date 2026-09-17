@@ -2,24 +2,26 @@ import Link from 'next/link';
 import { liveDestinations } from '@/config/destinations';
 import { site, whatsappLink } from '@/config/site';
 import DestinationCard from '@/components/DestinationCard';
+import Hero from '@/components/Hero';
+import CustomRequestForm from '@/components/CustomRequestForm';
 import { WhatsAppGlyph } from '@/components/Header';
 import { asset } from '@/lib/asset';
 
 const steps = [
   {
     n: 1,
-    title: 'Send your requirements',
-    body: 'Fill the enquiry form with your dates, group size and the activities you want. It takes about two minutes and needs no account.',
+    title: 'Build the trip',
+    body: 'Pick where, when, how long and who is coming, then choose what you want to do. Suggestions are already filled in, and you can throw them all out.',
   },
   {
     n: 2,
-    title: 'See an estimate immediately',
-    body: 'You get an indicative price range on the spot, with the flight component shown separately, plus a destination guide to download.',
+    title: 'See an estimate',
+    body: 'A price range on the spot, with flights shown separately, plus a copy of everything by email and on WhatsApp.',
   },
   {
     n: 3,
     title: 'Confirm and travel',
-    body: 'We follow up with an exact quote. Once you confirm, we arrange the visa, bookings and vouchers, and send a link to track progress.',
+    body: 'We follow up with an exact quote, then arrange the visa, bookings and vouchers. A private link tracks every step.',
   },
 ];
 
@@ -36,80 +38,66 @@ const included = [
 export default function HomePage() {
   return (
     <>
-      <section className="border-b border-sand-200 bg-sand-100">
-        <div className="wrap grid gap-10 py-12 sm:py-16 lg:grid-cols-[1.1fr_1fr] lg:items-center">
-          <div>
-            <p className="eyebrow">Dubai and Thailand</p>
-            <h1 className="mt-3 text-[2.1rem] leading-[1.14] sm:text-5xl">
-              Your trip abroad,
-              <br />
-              handled end to end.
-            </h1>
-            <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-ink-700">
-              Visa, flights, hotels, transfers and activities arranged as one booking, at one
-              price. Tell us what you want and you will have an estimate in two minutes.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <a
-                href={whatsappLink('Hello, I would like to plan a trip. Can you help?')}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-wa w-full sm:w-auto"
-              >
-                <WhatsAppGlyph />
-                Message on WhatsApp
-              </a>
-              <Link href="/plan/" className="btn-ghost w-full sm:w-auto">
-                Send your requirements
-              </Link>
-            </div>
-            <p className="mt-4 text-sm text-ink-500">{site.quotePromise}</p>
-          </div>
+      <Hero />
 
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={asset('/images/dubai-hero.jpg')}
-            alt="Dubai skyline at dusk seen from the marina"
-            width={900}
-            height={700}
-            className="aspect-[4/3] w-full rounded-xl2 object-cover shadow-card"
-          />
-        </div>
-      </section>
-
-      <section className="wrap py-14">
-        <h2 className="text-2xl sm:text-3xl">Destinations</h2>
-        <p className="mt-2 max-w-2xl text-[16px] text-ink-700">
-          Packages, indicative prices and practical detail for each destination. Malaysia,
-          Singapore and Vietnam will be added later.
+      {/* Build your trip: the form is the point of the page, so it comes first. */}
+      <section id="plan" className="wrap py-16">
+        <p className="eyebrow">Start here</p>
+        <h2 className="mt-3 text-2xl sm:text-3xl">Build your trip in about three minutes</h2>
+        <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
+          One question at a time. Choose your destination, dates and length, tell us who is
+          coming, then pick from what there is to do in each city. If you would rather not
+          pick anything, say so and we will plan it for you.
         </p>
-        <div className="mt-8 grid gap-6 sm:grid-cols-2">
-          {liveDestinations.map((d) => (
-            <DestinationCard key={d.slug} destination={d} />
+
+        <ol className="mt-9 grid gap-5 sm:grid-cols-3">
+          {steps.map((s) => (
+            <li key={s.n} className="card p-5">
+              <span className="grid h-8 w-8 place-items-center rounded-full bg-clay-100 text-sm font-bold text-clay">
+                {s.n}
+              </span>
+              <h3 className="mt-3 text-lg">{s.title}</h3>
+              <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">{s.body}</p>
+            </li>
           ))}
+        </ol>
+
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <Link href="/plan/" className="btn-primary w-full sm:w-auto">
+            Build my trip
+          </Link>
+          <a
+            href={whatsappLink('Hello, I would like to plan a trip.')}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-ghost w-full sm:w-auto"
+          >
+            <WhatsAppGlyph className="h-4 w-4 text-wa" />
+            Ask a question first
+          </a>
         </div>
       </section>
 
+      {/* Destinations */}
       <section className="border-y border-sand-200 bg-sand-100">
-        <div className="wrap py-14">
-          <h2 className="text-2xl sm:text-3xl">How it works</h2>
-          <ol className="mt-8 grid gap-5 sm:grid-cols-3">
-            {steps.map((s) => (
-              <li key={s.n} className="card p-5">
-                <span className="grid h-8 w-8 place-items-center rounded-full bg-clay-100 text-sm font-bold text-clay">
-                  {s.n}
-                </span>
-                <h3 className="mt-3 text-lg">{s.title}</h3>
-                <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">{s.body}</p>
-              </li>
+        <div className="wrap py-16">
+          <h2 className="text-2xl sm:text-3xl">Where we work</h2>
+          <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
+            Two destinations, eight cities, and enough knowledge of both to answer a question
+            at short notice. Somewhere else in mind? There is a form for that further down.
+          </p>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            {liveDestinations.map((d) => (
+              <DestinationCard key={d.slug} destination={d} />
             ))}
-          </ol>
+          </div>
         </div>
       </section>
 
-      <section className="wrap py-14">
+      {/* What is included */}
+      <section className="wrap py-16">
         <h2 className="text-2xl sm:text-3xl">What every booking includes</h2>
-        <ul className="mt-7 grid gap-3 sm:grid-cols-2">
+        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
           {included.map((item) => (
             <li
               key={item}
@@ -126,40 +114,58 @@ export default function HomePage() {
         </p>
       </section>
 
-      <section className="border-t border-sand-200 bg-sea-100">
-        <div className="wrap grid gap-8 py-12 sm:grid-cols-[auto_1fr] sm:items-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={asset(site.contactPhoto)}
-            alt={site.contactName}
-            width={128}
-            height={128}
-            className="h-24 w-24 rounded-full object-cover ring-4 ring-white"
-          />
+      {/* About */}
+      <section id="about" className="border-y border-sand-200 bg-sea-100">
+        <div className="wrap grid gap-10 py-16 lg:grid-cols-[0.8fr_1fr] lg:items-start">
           <div>
-            <h2 className="text-2xl">Talk to us before you book</h2>
-            <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-ink-700">
-              Questions about dates, visas, budget or whether a destination suits your group
-              are welcome at any stage, including well before you are ready to book.
-            </p>
-            <p className="mt-3 text-sm text-ink-500">
-              {site.contactName}, {site.name}. {site.responsePromise}
-            </p>
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-              <a
-                href={whatsappLink('Hello, I have a question about a trip.')}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-wa w-full sm:w-auto"
-              >
-                <WhatsAppGlyph />
-                Message on WhatsApp
-              </a>
-              <Link href="/plan/" className="btn-ghost w-full sm:w-auto">
-                Send your requirements
-              </Link>
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={asset(site.contactPhoto)}
+              alt={site.contactPhotoAlt}
+              width={420}
+              height={420}
+              className="aspect-square w-full max-w-[18rem] rounded-xl2 object-cover shadow-card"
+            />
+            <dl className="mt-5 grid max-w-[18rem] gap-3">
+              {site.about.facts.map((f) => (
+                <div key={f.label} className="rounded-xl border border-white bg-white/70 p-3">
+                  <dt className="text-xs font-semibold uppercase tracking-wider text-sea">
+                    {f.label}
+                  </dt>
+                  <dd className="mt-0.5 text-sm text-ink-700">{f.value}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
+
+          <div>
+            <p className="eyebrow text-sea">{site.about.heading}</p>
+            <h2 className="mt-3 text-2xl sm:text-3xl">{site.about.lead}</h2>
+            <div className="mt-6 space-y-4">
+              {site.about.paragraphs.map((para, i) => (
+                <p key={i} className="text-[16px] leading-relaxed text-ink-700">
+                  {para}
+                </p>
+              ))}
+            </div>
+            <p className="mt-6 text-[15px] text-ink-500">
+              {site.responsePromise} {site.quotePromise}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Custom trip or visa help */}
+      <section id="custom" className="wrap py-16">
+        <p className="eyebrow">Somewhere else, or visa help</p>
+        <h2 className="mt-3 text-2xl sm:text-3xl">Not the UAE or Thailand?</h2>
+        <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
+          We arrange trips beyond the two destinations above, and handle visas on their own.
+          Tell us roughly what you need and we will come back to you. No form to work
+          through, no account, and nobody will chase you.
+        </p>
+        <div className="mt-8">
+          <CustomRequestForm />
         </div>
       </section>
     </>

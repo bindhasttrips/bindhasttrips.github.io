@@ -1,15 +1,17 @@
+import Link from 'next/link';
+import { liveDestinations } from '@/config/destinations';
 import { site, whatsappLink } from '@/config/site';
 import { WhatsAppGlyph } from './Header';
 
 export default function Footer() {
   return (
     <footer className="mt-16 border-t border-sand-200 bg-sand-100">
-      <div className="wrap grid gap-10 py-12 sm:grid-cols-2">
-        <div>
+      <div className="wrap grid gap-10 py-14 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="lg:col-span-2">
           <p className="text-lg font-semibold">{site.name}</p>
           <p className="mt-2 max-w-sm text-[15px] leading-relaxed text-ink-700">
-            Visa, flights, hotels, transfers and activities for Dubai and Thailand, arranged
-            as a single booking.
+            Visa, flights, hotels, transfers and activities for the UAE and Thailand,
+            arranged as a single booking at a single price.
           </p>
           <a
             href={whatsappLink('Hello, I would like to ask about a trip.')}
@@ -28,6 +30,36 @@ export default function Footer() {
             </a>
           </p>
         </div>
+
+        <nav aria-label="Footer">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-500">
+            Plan a trip
+          </h2>
+          <ul className="mt-3 space-y-2 text-[15px]">
+            <li>
+              <Link className="text-ink-700 hover:text-clay" href="/plan/">
+                Build your trip
+              </Link>
+            </li>
+            {liveDestinations.map((d) => (
+              <li key={d.slug}>
+                <Link className="text-ink-700 hover:text-clay" href={`/${d.slug}/`}>
+                  {d.name}
+                </Link>
+              </li>
+            ))}
+            <li>
+              <Link className="text-ink-700 hover:text-clay" href="/#custom">
+                Custom trip or visa help
+              </Link>
+            </li>
+            <li>
+              <Link className="text-ink-700 hover:text-clay" href="/#about">
+                About {site.contactName.split(' ')[0]}
+              </Link>
+            </li>
+          </ul>
+        </nav>
 
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-500">

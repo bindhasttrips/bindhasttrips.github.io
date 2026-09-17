@@ -10,6 +10,29 @@ export const site = {
   registration: 'TODO: registration number', // TODO
   contactName: 'Deep Ghuge',
   contactPhoto: '/images/founder.jpg',
+  contactPhotoAlt: 'Deep Ghuge at Portland Head Light in Maine',
+  /**
+   * DEEP: this is a draft written from the facts you gave me. The shape is
+   * right, the specifics are mine. Rewrite anything that is not literally
+   * true before a customer reads it, especially the paragraph about your
+   * friends. A story that falls apart on a phone call costs more than a
+   * plain one.
+   */
+  about: {
+    heading: 'About Bindhast',
+    lead: 'Travel is close to my heart. Planning it is closer.',
+    paragraphs: [
+      'I am Deep Ghuge. I grew up in Hingoli, a small town in Marathwada that most people in Maharashtra cannot place on a map, and I now live in Washington DC, where I am finishing a PhD in Physics.',
+      'I have spent the better part of a decade working out which airline drops its fares on a Tuesday, which visa portal breaks if you open it in Safari, and which beach is worth an extra two hours in a minivan.',
+      'It started as a favour. A friend forwarded me a fare to Bangkok and asked whether it was any good. It was not, and moving the trip two days saved him nine thousand rupees. Word got around. For a few years my evenings were a spreadsheet of other people\u2019s holidays, and I enjoyed it more than I expected to.',
+      'Bindhast means carefree in Marathi. That is the whole idea: you should be able to look forward to a trip instead of managing it. The research, the visa, the bookings and the hundred small decisions are mine. The holiday is yours.',
+    ],
+    facts: [
+      { label: 'From', value: 'Hingoli, Maharashtra' },
+      { label: 'Based in', value: 'Washington DC' },
+      { label: 'Day job', value: 'PhD in Physics' },
+    ],
+  },
   tagline: 'Trips abroad, handled end to end.',
   url: 'https://bindhasttrips.github.io', // TODO: custom domain
   email: 'hello@bindhasttrips.com', // TODO
