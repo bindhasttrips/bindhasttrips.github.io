@@ -146,7 +146,7 @@ function trackerPayload(token) {
     firstName: String(r[col('name')] || '').split(' ')[0],
     destination: r[col('destination')],
     cities: r[col('cities')],
-    travelMonth: r[col('travelMonth')],
+    travelMonth: monthLabel(r[col('travelMonth')]),
     days: r[col('days')],
     travellers: r[col('totalTravellers')],
     status: r[col('status')] || 'new',
@@ -179,7 +179,7 @@ function editPayload(editToken) {
     destination: r[col('destination')],
     cities: splitList(r[col('cities')]),
     groupType: r[col('groupType')],
-    travelMonth: r[col('travelMonth')],
+    travelMonth: monthLabel(r[col('travelMonth')]),
     datesFlexible: String(r[col('datesFlexible')]) === 'flexible',
     nights: Number(r[col('nights')]) || 0,
     adults: Number(r[col('adults')]) || 0,
@@ -250,6 +250,12 @@ function buildRow(b, token, editToken) {
 /** Formulas live in cells so they keep working when you edit by hand. */
 function writeComputedCells(sheet, rowIndex, b, token, editToken) {
   var r = rowIndex;
+  // Sheets helpfully parses "December 2026" into a date, which then comes back
+  // out as an ISO string and breaks both the tracker and the edit prefill.
+  // Forcing the cell to plain text stops that at the source.
+  var monthCell = sheet.getRange(r, col('travelMonth') + 1);
+  monthCell.setNumberFormat('@');
+  if (b && b.travelMonth) monthCell.setValue(clean(b.travelMonth, 40));
   sheet.getRange(r, col('balance') + 1).setFormula(
     '=IF(N(' + a1(r, 'quotedTotal') + ')=0,"",' + a1(r, 'quotedTotal') + '-N(' + a1(r, 'amountPaid') + '))');
   sheet.getRange(r, col('trackerLink') + 1).setValue(trackerUrl(token));
@@ -381,6 +387,9 @@ function setupSheet() {
   sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]).setFontWeight('bold');
   sheet.setFrozenRows(1);
   sheet.setFrozenColumns(5);
+
+  sheet.getRange(2, col('travelMonth') + 1, Math.max(1, sheet.getMaxRows() - 1), 1)
+    .setNumberFormat('@');
 
   applyList(sheet, 'status',
     ['new', 'contacted', 'quoted', 'deposit sent', 'booked', 'travelling', 'completed', 'lost']);
@@ -528,6 +537,15 @@ function makeToken() {
 
 function trackerUrl(token) { return SITE_URL + '/trip/?t=' + token; }
 function editUrl(editToken) { return SITE_URL + '/plan/?e=' + editToken; }
+
+/** Renders a travel month as text whether it is stored as text or a date. */
+function monthLabel(v) {
+  if (!v) return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'MMMM yyyy');
+  }
+  return String(v);
+}
 
 function normaliseStage(v) {
   var s = String(v || 'pending').toLowerCase().trim();
