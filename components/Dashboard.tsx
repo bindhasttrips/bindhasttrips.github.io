@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchAdmin, updateBooking, urgency, num, daysAgo,
   STATUSES, PAYMENT_STATUSES, STAGE_FIELDS, STAGE_STATES,
@@ -254,6 +254,13 @@ function BookingCard({ booking: b, adminKey }: { booking: Booking; adminKey: str
    */
   const [local, setLocal] = useState<Record<string, string | number | boolean>>({});
 
+  /**
+   * One counter per field. A response only gets to touch the value if it is
+   * still the newest write for that field, so a slow failure cannot roll back
+   * a change the user made after it.
+   */
+  const writeSeq = useRef<Record<string, number>>({});
+
   const val = (name: string): string | number | boolean => {
     if (name in local) return local[name];
     const v = (b as unknown as Record<string, unknown>)[name];
@@ -264,17 +271,28 @@ function BookingCard({ booking: b, adminKey }: { booking: Booking; adminKey: str
     field in local ? String(local[field]) : (b.stages[i]?.state ?? 'pending');
 
   const save = async (patch: Patch, label: string) => {
+    const fields = Object.keys(patch);
     const before: Record<string, string | number | boolean> = {};
-    Object.keys(patch).forEach((k) => { before[k] = val(k); });
+    const mine: Record<string, number> = {};
+    fields.forEach((k) => {
+      before[k] = val(k);
+      mine[k] = (writeSeq.current[k] ?? 0) + 1;
+      writeSeq.current[k] = mine[k];
+    });
+
     setLocal((l) => ({ ...l, ...patch }));
     setSaving(label);
     setFailed('');
     setSaved(false);
 
     const res = await updateBooking(adminKey, b.row, patch);
+
+    // A response that has been overtaken must not touch anything.
+    const current = fields.every((k) => writeSeq.current[k] === mine[k]);
+    if (!current) return;
+
     setSaving('');
     if (!res.ok) {
-      // Put it back. Leaving a value on screen that is not in the sheet is worse.
       setLocal((l) => ({ ...l, ...before }));
       setFailed('Not saved');
       return;
