@@ -163,43 +163,38 @@ export default function HomePage() {
         </p>
       </section>
 
-      {/* About */}
+      {/* About the business. No individual, and no claim about how many
+          people work here in either direction. */}
       <section id="about" className="border-y border-sand-200 bg-sea-100">
-        <div className="wrap grid gap-10 py-16 lg:grid-cols-[0.8fr_1fr] lg:items-start">
-          <div>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={asset(site.contactPhoto)}
-              alt={site.contactPhotoAlt}
-              width={420}
-              height={420}
-              className="aspect-square w-full max-w-[18rem] rounded-xl2 object-cover shadow-card"
-            />
-            <dl className="mt-5 grid max-w-[18rem] gap-3">
-              {site.about.facts.map((f) => (
-                <div key={f.label} className="rounded-xl border border-white bg-white/70 p-3">
-                  <dt className="text-xs font-semibold uppercase tracking-wider text-sea">
-                    {f.label}
-                  </dt>
-                  <dd className="mt-0.5 text-sm text-ink-700">{f.value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
+        <div className="wrap py-16">
+          <p className="eyebrow text-sea">{site.about.heading}</p>
+          <h2 className="mt-3 max-w-3xl text-2xl sm:text-3xl">{site.about.lead}</h2>
+          <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
+            {site.about.intro}
+          </p>
 
-          <div>
-            <p className="eyebrow text-sea">{site.about.heading}</p>
-            <h2 className="mt-3 text-2xl sm:text-3xl">{site.about.lead}</h2>
-            <div className="mt-6 space-y-4">
-              {site.about.paragraphs.map((para, i) => (
-                <p key={i} className="text-[16px] leading-relaxed text-ink-700">
-                  {para}
-                </p>
-              ))}
-            </div>
-            <p className="mt-6 text-[15px] text-ink-500">
-              {site.responsePromise} {site.quotePromise}
-            </p>
+          <ul className="mt-9 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+            {site.about.points.map((point) => (
+              <li key={point.title} className="rounded-xl2 border border-white bg-white/80 p-5">
+                <h3 className="text-lg leading-snug">{point.title}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-ink-700">{point.body}</p>
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <Link href="/plan/" className="btn-primary w-full sm:w-auto">
+              Build my trip
+            </Link>
+            <a
+              href={whatsappLink('Hello, I have a question about a trip.')}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-ghost w-full sm:w-auto"
+            >
+              <WhatsAppGlyph className="h-4 w-4 text-wa" />
+              Ask a question
+            </a>
           </div>
         </div>
       </section>

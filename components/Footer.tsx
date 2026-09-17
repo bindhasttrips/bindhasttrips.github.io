@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { liveDestinations } from '@/config/destinations';
 import { site, whatsappLink } from '@/config/site';
+import { CREDITED_PHOTOS } from '@/config/photos';
 import { WhatsAppGlyph } from './Header';
 
 export default function Footer() {
@@ -55,7 +56,7 @@ export default function Footer() {
             </li>
             <li>
               <Link className="text-ink-700 hover:text-clay" href="/#about">
-                About {site.contactName.split(' ')[0]}
+                About Bindhast
               </Link>
             </li>
           </ul>
@@ -81,6 +82,28 @@ export default function Footer() {
           <p>
             {site.legalName}. {site.registration}
           </p>
+          {CREDITED_PHOTOS.length > 0 && (
+            <p className="max-w-xl">
+              {/* Attribution is a licence condition on these photographs, not
+                  a courtesy. Do not remove it while the images are in use. */}
+              Photographs:{' '}
+              {CREDITED_PHOTOS.map((photo, i) => (
+                <span key={photo.key}>
+                  {i > 0 && ', '}
+                  <a
+                    className="underline underline-offset-2"
+                    href={photo.page}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {photo.artist}
+                  </a>{' '}
+                  ({photo.license})
+                </span>
+              ))}
+              , via Wikimedia Commons.
+            </p>
+          )}
           <p>
             © {new Date().getFullYear()} {site.name}
           </p>

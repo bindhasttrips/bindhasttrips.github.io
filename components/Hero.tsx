@@ -9,9 +9,9 @@ import { WhatsAppGlyph } from '@/components/Header';
  * Each frame starts the same animation later so they hand over in turn.
  */
 const FRAMES = [
-  { src: '/images/thailand-hero.jpg', alt: 'Longtail boats on a limestone bay in southern Thailand', delay: '0s' },
-  { src: '/images/dubai-hero.jpg', alt: 'Dubai skyline at dusk seen from the marina', delay: '-8s' },
-  { src: '/images/thailand-card.jpg', alt: 'Evening light on the Andaman coast', delay: '-16s' },
+  { src: '/images/places/krabi.jpg', alt: 'Railay beach in Krabi, limestone cliffs behind the sand', delay: '0s' },
+  { src: '/images/places/dubai.jpg', alt: 'Dubai skyline seen across the water from Jumeirah beach', delay: '-8s' },
+  { src: '/images/places/bangkok.jpg', alt: 'The Grand Palace in Bangkok', delay: '-16s' },
 ];
 
 const FACTS = [

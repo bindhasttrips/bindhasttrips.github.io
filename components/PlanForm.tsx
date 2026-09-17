@@ -10,6 +10,7 @@ import { estimateTrip } from '@/lib/estimate';
 import { allocateNights, daysFromNights } from '@/lib/itinerary';
 import { formatInr, formatInrRange } from '@/lib/format';
 import { asset } from '@/lib/asset';
+import { cityImage } from '@/config/photos';
 import { sortForParty, matchesStyles, recommendFor, type Party } from '@/lib/suggest';
 import ActivityCard from '@/components/ActivityCard';
 import { WhatsAppGlyph } from '@/components/Header';
@@ -603,10 +604,11 @@ export default function PlanForm() {
         <Step title={`Which parts of ${destination.name}?`}>
           <div className="grid gap-3">
             {destination.cities.map((c) => (
-              <Choice
+              <CityChoice
                 key={c}
+                city={c}
+                count={destination.activities.filter((a) => a.city === c).length}
                 selected={form.cities.includes(c)}
-                multi
                 onClick={() => {
                   const cities = toggle(form.cities, c);
                   set('cities', cities);
@@ -619,8 +621,6 @@ export default function PlanForm() {
                     }),
                   );
                 }}
-                title={c}
-                subtitle={`${destination.activities.filter((a) => a.city === c).length} things to do`}
               />
             ))}
           </div>
@@ -1046,6 +1046,49 @@ function describeGroup(party: Party) {
 }
 
 /* ---------------- shared pieces ---------------- */
+
+/** A city with its photograph, so the choice is not made off a word alone. */
+function CityChoice({
+  city, count, selected, onClick,
+}: {
+  city: string;
+  count: number;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  const image = cityImage(city);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={selected}
+      className={`flex w-full items-stretch overflow-hidden rounded-xl border text-left transition-colors ${
+        selected ? 'border-clay bg-clay-100 ring-1 ring-clay' : 'border-sand-300 bg-white hover:bg-sand-100'
+      }`}
+    >
+      <span aria-hidden className="w-24 shrink-0 bg-sand-200 sm:w-32">
+        {image && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={asset(image)} alt="" loading="lazy" className="h-full w-full object-cover" />
+        )}
+      </span>
+      <span className="flex flex-1 items-start gap-3 p-4">
+        <span
+          aria-hidden
+          className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded border-2 text-xs font-bold ${
+            selected ? 'border-clay bg-clay text-white' : 'border-sand-300 bg-white text-transparent'
+          }`}
+        >
+          ✓
+        </span>
+        <span>
+          <span className="block font-semibold">{city}</span>
+          <span className="mt-0.5 block text-[14px] text-ink-700">{count} things to do</span>
+        </span>
+      </span>
+    </button>
+  );
+}
 
 function describeParty(f: FormState) {
   const bits: string[] = [];
