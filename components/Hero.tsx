@@ -45,17 +45,18 @@ export default function Hero() {
         <h1
           className="rise-in max-w-3xl text-[2.6rem] font-semibold leading-[1.03] tracking-tight text-white sm:text-[4rem]"
         >
-          Pick what you want to do.
+          Book Smart.
           <br />
-          We build the trip around it.
+          Travel Cheap.
         </h1>
 
         <p
           className="rise-in mt-6 max-w-xl text-[17px] leading-relaxed text-sand-200 sm:text-lg"
           style={{ animationDelay: '0.08s' }}
         >
-          A package trip with an itinerary you choose rather than one you are sold. Visa,
-          flights, stays and transfers all arranged as one booking.
+          We do everything we can to keep the cost down, so you can travel more often. You
+          choose what you want to see and do. We handle the visa, the bookings and the
+          briefing, and leave room for the spontaneity that makes a trip worth taking.
         </p>
 
         <div
