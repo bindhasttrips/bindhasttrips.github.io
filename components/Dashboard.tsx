@@ -31,6 +31,20 @@ export default function Dashboard() {
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
 
+  /** Forgets the key on this device and returns to the prompt. */
+  const signOut = useCallback(() => {
+    try {
+      window.localStorage.removeItem(KEY_STORAGE);
+    } catch {
+      // Blocked storage: there was nothing saved to forget.
+    }
+    setKey('');
+    setEntered('');
+    setData(null);
+    setState('idle');
+    setProblem('');
+  }, []);
+
   const load = useCallback(async (k: string) => {
     setState('loading');
     setProblem('');
@@ -104,7 +118,8 @@ export default function Dashboard() {
       <div className="wrap max-w-md py-20">
         <h1 className="text-2xl">Dashboard</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-ink-700">
-          Enter your dashboard key. It is stored in this browser only.
+          Enter your dashboard key. It stays in this browser until you sign out, so do not
+          leave it saved on a shared computer.
         </p>
         <input
           className="input mt-5"
@@ -160,6 +175,13 @@ export default function Dashboard() {
           >
             Open sheet
           </a>
+          <button
+            type="button"
+            onClick={signOut}
+            className="btn-ghost h-10 min-h-0 px-4 text-sm"
+          >
+            Sign out
+          </button>
         </div>
       </header>
 
