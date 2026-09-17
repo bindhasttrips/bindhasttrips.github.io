@@ -67,16 +67,31 @@ export interface AdminData {
 
 export type AdminResult = AdminData | { ok: false; error: string };
 
+/**
+ * Apps Script serialises executions per user and cold starts are slow, so a
+ * first load of twenty seconds is normal rather than a failure. The timeout
+ * is generous for that reason, and the caller is told which of the two
+ * things went wrong instead of being given one vague message.
+ */
 export async function fetchAdmin(key: string): Promise<AdminResult> {
   if (!APPS_SCRIPT_URL) return { ok: false, error: 'not-configured' };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 60000);
   try {
     const res = await fetch(`${APPS_SCRIPT_URL}?admin=${encodeURIComponent(key)}`, {
       redirect: 'follow',
+      signal: controller.signal,
     });
     if (!res.ok) return { ok: false, error: 'unreachable' };
-    return (await res.json()) as AdminResult;
-  } catch {
-    return { ok: false, error: 'unreachable' };
+    const body = (await res.json()) as AdminResult;
+    // A reply that came back but said no is a rejected key, not a dead script.
+    if (!body.ok) return { ok: false, error: 'rejected' };
+    return body;
+  } catch (err) {
+    const aborted = err instanceof DOMException && err.name === 'AbortError';
+    return { ok: false, error: aborted ? 'timeout' : 'unreachable' };
+  } finally {
+    clearTimeout(timer);
   }
 }
 

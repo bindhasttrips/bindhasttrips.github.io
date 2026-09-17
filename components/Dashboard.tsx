@@ -25,15 +25,26 @@ export default function Dashboard() {
   const [entered, setEntered] = useState('');
   const [data, setData] = useState<AdminData | null>(null);
   const [state, setState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [problem, setProblem] = useState('');
   const [tab, setTab] = useState<'bookings' | 'custom'>('bookings');
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
 
   const load = useCallback(async (k: string) => {
     setState('loading');
+    setProblem('');
     const res = await fetchAdmin(k);
     if (!res.ok) {
       setState('error');
+      setProblem(
+        res.error === 'rejected'
+          ? 'That key was not accepted. Check it against ADMIN_KEY at the top of Code.gs.'
+          : res.error === 'timeout'
+            ? 'The script did not answer in time. It is usually busy rather than broken, so try again in a moment.'
+            : res.error === 'not-configured'
+              ? 'The site has no script URL configured.'
+              : 'Could not reach the script. Check the deployment is still live.',
+      );
       setData(null);
       return;
     }
@@ -103,8 +114,12 @@ export default function Dashboard() {
           onKeyDown={(e) => e.key === 'Enter' && load(entered)}
         />
         {state === 'error' && (
-          <p className="mt-3 text-sm font-medium text-clay">
-            That key was not accepted, or the script is unreachable.
+          <p className="mt-3 text-sm font-medium text-clay">{problem}</p>
+        )}
+        {state === 'loading' && (
+          <p className="mt-3 text-sm text-ink-500">
+            Reading the sheet. The first load can take twenty seconds or so, because Google
+            wakes the script up before it answers.
           </p>
         )}
         <button
