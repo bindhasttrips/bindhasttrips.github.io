@@ -48,11 +48,11 @@ export const site = {
       },
       {
         title: 'Everything booked before you fly',
-        body: 'Flights ticketed, hotels confirmed and activity tickets issued in advance. You land with the whole trip already in your hand.',
+        body: 'Flights ticketed, stays confirmed and activity tickets issued in advance. You land with the whole trip already in your hand.',
       },
       {
-        title: 'The price is written down before you pay',
-        body: 'A full quote, including what is not covered. Peak date surcharges and fare changes are raised with you first, never added afterwards.',
+        title: 'One quote, paid once',
+        body: 'The full price in writing, including what is not covered. No deposits, no balance chased later, no surcharge after you have paid.',
       },
       {
         title: 'You can see the progress',
@@ -68,13 +68,14 @@ export const site = {
   url: 'https://bindhasttrips.github.io', // TODO: custom domain
   email: 'hello@bindhasttrips.com', // TODO
   responsePromise: 'WhatsApp replies within a few hours, 9am to 10pm IST.',
-  quotePromise: 'Exact quote within 24 hours of your enquiry.',
+  quotePromise: 'We come back with a full quote within 24 hours.',
   cancellation: [
-    'The deposit is 25 percent of the trip cost. It is used to secure your visa, flights and hotels.',
-    'Cancel more than 30 days before departure for a full refund, less any amount already paid to airlines, hotels or the visa office.',
-    'Cancel between 15 and 30 days before departure for a 50 percent refund.',
-    'Within 15 days of departure, flights and hotels are non refundable and no refund is possible. We will confirm what is recoverable before you cancel.',
-    'If a visa is refused for reasons outside your control, the deposit is refunded less the visa fee.',
+    'The full quoted amount is payable before anything is booked. We do not hold dates or ticket flights against unpaid balances.',
+    'Once paid, the price is fixed. Fare rises after that point are ours, not yours.',
+    'Cancel more than 30 days before departure and we refund everything not already paid to airlines, hotels or the visa office.',
+    'Cancel 15 to 30 days before and we refund whatever suppliers will still release, which is usually a small part of the total.',
+    'Inside 15 days, flights and hotels are non refundable, so no refund is possible. We will tell you exactly what is recoverable before you decide.',
+    'If a visa is refused for reasons outside your control, we refund everything except the visa fee and anything already non refundable.',
   ],
 } as const;
 

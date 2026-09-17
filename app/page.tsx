@@ -5,7 +5,7 @@ import Hero from '@/components/Hero';
 import CustomRequestForm from '@/components/CustomRequestForm';
 import { WhatsAppGlyph } from '@/components/Header';
 import { asset } from '@/lib/asset';
-import { TRAVEL_TIPS } from '@/config/tips';
+import TipDeck from '@/components/TipDeck';
 
 const steps = [
   {
@@ -27,8 +27,8 @@ const steps = [
 
 const included = [
   'Visa application, documentation and fees where a visa is required',
-  'Return flights ticketed on your dates',
-  'Hotels with daily breakfast',
+  'Return flights, ticketed on your dates',
+  'Hotels and Airbnbs',
   'Airport and activity transfers',
   'Activities booked in advance, with tickets issued before departure',
   'Travel insurance for the trip dates',
@@ -125,21 +125,12 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Travel information */}
+      {/* Travel information, as a deck rather than a wall. */}
       <section className="wrap py-16">
-        <p className="eyebrow">Before you book anything</p>
+        <p className="eyebrow">Before you book</p>
         <h2 className="mt-3 text-2xl sm:text-3xl">Things worth knowing</h2>
-        <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
-          General travel information, not a sales pitch. These are the questions that come up
-          most often, and the answers do not change much by destination.
-        </p>
-        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {TRAVEL_TIPS.map((tip) => (
-            <article key={tip.title} className="rounded-xl2 border border-sand-200 bg-white p-5">
-              <h3 className="text-lg leading-snug">{tip.title}</h3>
-              <p className="mt-2 text-[15px] leading-relaxed text-ink-700">{tip.body}</p>
-            </article>
-          ))}
+        <div className="mt-8">
+          <TipDeck />
         </div>
       </section>
 

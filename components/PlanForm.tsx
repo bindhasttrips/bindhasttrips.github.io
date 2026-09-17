@@ -7,11 +7,11 @@ import { TRIP_STYLES, GROUP_TYPES, type Activity, type Destination, type GroupTy
 import { STAY_TYPES, NIGHTLY_BUDGETS, TOTAL_BUDGETS, stayById } from '@/config/stay';
 import { site, whatsappLink } from '@/config/site';
 import { estimateTrip } from '@/lib/estimate';
-import { allocateNights, daysFromNights } from '@/lib/itinerary';
+import { daysFromNights } from '@/lib/itinerary';
 import { formatInr, formatInrRange } from '@/lib/format';
 import { asset } from '@/lib/asset';
 import { cityImage } from '@/config/photos';
-import { sortForParty, matchesStyles, recommendFor, type Party } from '@/lib/suggest';
+import { sortForParty, matchesStyles, type Party } from '@/lib/suggest';
 import ActivityCard from '@/components/ActivityCard';
 import { WhatsAppGlyph } from '@/components/Header';
 import { submitInquiry, fetchEditablePlan, normaliseIndianMobile, type SubmitResult } from '@/lib/inquiry';
@@ -200,11 +200,6 @@ export default function PlanForm() {
     return s;
   }, [form]);
 
-  const nightsByCity = useMemo(
-    () => (form ? allocateNights(form.nights, form.cities) : []),
-    [form],
-  );
-
   const estimate = useMemo(() => {
     if (!form || !destination) return null;
     return estimateTrip({
@@ -277,17 +272,13 @@ export default function PlanForm() {
     setError('');
     setSubmitting(true);
 
-    const byCity = nightsByCity.map((c) => {
+    const byCity = form!.cities.map((city) => {
+      if (form!.helpCities.includes(city)) return `${city}: asked us to plan it`;
       const names = form!.activities
         .map((id) => destination!.activities.find((a) => a.id === id))
-        .filter((a): a is Activity => Boolean(a) && a!.city === c.city)
+        .filter((a): a is Activity => Boolean(a) && a!.city === city)
         .map((a) => a.name);
-      const label = form!.helpCities.includes(c.city)
-        ? 'ASKED US TO PLAN THIS'
-        : names.length
-          ? names.join('; ')
-          : 'nothing chosen';
-      return `${c.city}, ${c.nights} ${c.nights === 1 ? 'night' : 'nights'}: ${label}`;
+      return `${city}: ${names.length ? names.join('; ') : 'nothing picked'}`;
     });
 
     const res = await submitInquiry({
@@ -336,21 +327,18 @@ export default function PlanForm() {
         name={form.name}
         destinationName={destination?.name ?? ''}
         brochure={destination?.brochure ?? ''}
-        estimate={estimate}
         summaryLines={[
           `${destination?.name ?? ''}, ${daysFromNights(form.nights)} days`,
           `${MONTH_NAMES[form.travelMonth - 1]} ${form.travelYear}${form.datesFlexible ? ', flexible' : ''}`,
           `${describeParty(form)}, flying from ${form.flyingFrom || 'India'}`,
           `Staying in ${stayById(form.stayType).label}`,
-          ...nightsByCity.map((c) => {
-            if (form.helpCities.includes(c.city)) {
-              return `${c.city} (${c.nights}n): please plan this for me`;
-            }
+          ...form.cities.map((city) => {
+            if (form.helpCities.includes(city)) return `${city}: please plan this for me`;
             const names = form.activities
               .map((id) => destination?.activities.find((a) => a.id === id))
-              .filter((a): a is Activity => Boolean(a) && a!.city === c.city)
+              .filter((a): a is Activity => Boolean(a) && a!.city === city)
               .map((a) => a.name);
-            return `${c.city} (${c.nights}n): ${names.length ? names.join(', ') : 'nothing picked yet'}`;
+            return `${city}: ${names.length ? names.join(', ') : 'nothing picked yet'}`;
           }),
         ]}
       />
@@ -428,7 +416,7 @@ export default function PlanForm() {
       {step === 'group' && (
         <Step
           title="Who are you travelling with?"
-          subtitle="This matters more than anything else you tell us. It decides the pace, the hotels and what we put in front of you."
+          subtitle="This shapes the pace, the stays and what we suggest."
         >
           <div className="grid gap-3">
             {GROUP_TYPES.map((g) => (
@@ -446,10 +434,11 @@ export default function PlanForm() {
 
       {step === 'when' && (
         <Step title="When do you want to travel?">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Month">
+          <div className="grid grid-cols-2 items-start gap-3">
+            <label className="block">
+              <span className="text-sm font-semibold">Month</span>
               <select
-                className="input"
+                className="input mt-2"
                 value={form.travelMonth}
                 onChange={(e) => set('travelMonth', Number(e.target.value))}
               >
@@ -457,10 +446,11 @@ export default function PlanForm() {
                   <option key={m} value={i + 1}>{m}</option>
                 ))}
               </select>
-            </Field>
-            <Field label="Year">
+            </label>
+            <label className="block">
+              <span className="text-sm font-semibold">Year</span>
               <select
-                className="input"
+                className="input mt-2"
                 value={form.travelYear}
                 onChange={(e) => set('travelYear', Number(e.target.value))}
               >
@@ -469,7 +459,7 @@ export default function PlanForm() {
                   return <option key={y} value={y}>{y}</option>;
                 })}
               </select>
-            </Field>
+            </label>
           </div>
 
           <Toggle
@@ -533,10 +523,7 @@ export default function PlanForm() {
               </button>
             </div>
           </div>
-          <Note>
-            Entirely your choice. We will tell you honestly if it is too little time for the
-            cities you pick, or more than you need.
-          </Note>
+          <Note>We will tell you if it is too little time for the cities you pick.</Note>
         </Step>
       )}
 
@@ -562,10 +549,7 @@ export default function PlanForm() {
       )}
 
       {step === 'origin' && (
-        <Step
-          title="Which city will you fly from?"
-          subtitle="Fares vary a lot by departure city, so this changes the number we quote you."
-        >
+        <Step title="Which city will you fly from?" subtitle="Fares vary a lot by city.">
           <Field label="Your city">
             <input
               className="input"
@@ -624,13 +608,7 @@ export default function PlanForm() {
               />
             ))}
           </div>
-          {nightsByCity.length > 0 && (
-            <div className="mt-4 rounded-xl bg-sand-100 p-4 text-[15px] leading-relaxed text-ink-700">
-              <strong className="font-semibold">Suggested split of your {form.nights} nights: </strong>
-              {nightsByCity.map((c) => `${c.city} ${c.nights}`).join(', ')}. We will fine tune
-              this with you.
-            </div>
-          )}
+
         </Step>
       )}
 
@@ -667,10 +645,7 @@ export default function PlanForm() {
       )}
 
       {step === 'style' && (
-        <Step
-          title="What kind of trip is this?"
-          subtitle="Pick as many as apply. It decides what we put in front of you next."
-        >
+        <Step title="What kind of trip is this?" subtitle="Pick as many as apply.">
           <div className="grid gap-3 sm:grid-cols-2">
             {TRIP_STYLES.map((s) => (
               <Choice
@@ -690,7 +665,6 @@ export default function PlanForm() {
         <ActivityStep
           destination={destination}
           city={activityCity}
-          nights={nightsByCity.find((c) => c.city === activityCity)?.nights ?? 0}
           all={destination.activities.filter((a) => a.city === activityCity)}
           selected={form.activities}
           styles={form.styles}
@@ -709,17 +683,13 @@ export default function PlanForm() {
           onCancelHelp={() =>
             set('helpCities', form.helpCities.filter((c) => c !== activityCity))
           }
-          onAddRecommended={(ids) => {
-            set('helpCities', form.helpCities.filter((c) => c !== activityCity));
-            set('activities', Array.from(new Set([...form.activities, ...ids])));
-          }}
         />
       )}
 
       {step === 'budget' && (
         <Step
           title="What budget are you working with?"
-          subtitle="Per person, including flights. It decides which hotels we put forward."
+          subtitle="Per person, including flights."
         >
           <div className="grid gap-3">
             {TOTAL_BUDGETS.map((b) => (
@@ -738,17 +708,13 @@ export default function PlanForm() {
                 destination.pricing.indicativeFlight.low,
                 destination.pricing.indicativeFlight.high,
               )}{' '}
-              per person
-              {destination.visa.feeInr > 0
-                ? `, and the visa is ${formatInr(destination.visa.feeInr)} per person`
-                : ''}
-              . Both are inside the estimate we show you next.
+              per person.
             </Note>
           )}
         </Step>
       )}
 
-      {step === 'review' && destination && estimate && (
+      {step === 'review' && destination && (
         <Step title="Here is your trip">
           <div className="card p-5">
             <p className="text-lg font-semibold">
@@ -761,38 +727,26 @@ export default function PlanForm() {
             </p>
 
             <div className="mt-5 space-y-4 border-t border-sand-200 pt-5">
-              {nightsByCity.map((c) => {
+              {form.cities.map((city) => {
                 const picked = form.activities
                   .map((id) => destination.activities.find((a) => a.id === id))
-                  .filter((a): a is Activity => Boolean(a) && a!.city === c.city);
+                  .filter((a): a is Activity => Boolean(a) && a!.city === city);
                 return (
-                  <div key={c.city}>
-                    <p className="font-semibold">
-                      {c.city}
-                      <span className="ml-2 font-normal text-ink-500">
-                        {c.nights} {c.nights === 1 ? 'night' : 'nights'}
-                      </span>
-                    </p>
-                    {form.helpCities.includes(c.city) ? (
-                      <p className="mt-1 text-[15px] text-sea">
-                        You asked us to plan this one. We will.
-                      </p>
+                  <div key={city}>
+                    <p className="font-semibold">{city}</p>
+                    {form.helpCities.includes(city) ? (
+                      <p className="mt-1 text-[15px] text-sea">You asked us to plan this one.</p>
                     ) : picked.length > 0 ? (
                       <ul className="mt-2 space-y-1.5">
                         {picked.map((a) => (
                           <li key={a.id} className="flex gap-2 text-[15px] text-ink-700">
                             <Tick />
-                            <span>
-                              {a.name}
-                              <span className="text-ink-300"> · about {a.durationHours}h</span>
-                            </span>
+                            <span>{a.name}</span>
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="mt-1 text-[15px] text-ink-500">
-                        Nothing booked. We will suggest things on the call.
-                      </p>
+                      <p className="mt-1 text-[15px] text-ink-500">Nothing picked yet.</p>
                     )}
                   </div>
                 );
@@ -800,38 +754,9 @@ export default function PlanForm() {
             </div>
           </div>
 
-          <div className="card mt-4 p-5">
-            <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">
-              Estimated total for {estimate.travellers}{' '}
-              {estimate.travellers === 1 ? 'traveller' : 'travellers'}
-            </p>
-            <p className="mt-1 text-[2rem] font-semibold leading-tight tracking-tight">
-              {formatInrRange(estimate.total.low, estimate.total.high)}
-            </p>
-            <p className="mt-1 text-[15px] text-ink-700">
-              About {formatInrRange(estimate.perPerson.low, estimate.perPerson.high)} per person.
-            </p>
-            <dl className="mt-5 space-y-2 border-t border-sand-200 pt-4 text-[15px]">
-              <RowLine label="Hotels, transfers, visa and activities">
-                {formatInrRange(estimate.land.low, estimate.land.high)}
-              </RowLine>
-              <RowLine label="Flights, estimated">
-                {formatInrRange(estimate.flights.low, estimate.flights.high)}
-              </RowLine>
-            </dl>
-            {estimate.unpricedActivities > 0 && (
-              <p className="mt-4 text-[15px] leading-relaxed text-ink-700">
-                The {estimate.unpricedActivities}{' '}
-                {estimate.unpricedActivities === 1 ? 'activity' : 'activities'} you chose are
-                quoted separately and are not in the figure above.
-              </p>
-            )}
-            <p className="mt-4 rounded-xl bg-sand-100 p-4 text-sm leading-relaxed text-ink-700">
-              An estimate, not a quote. It moves with your exact dates, with availability, and
-              with what flights cost on the day we ticket. We confirm every number with you
-              before anything is booked.
-            </p>
-          </div>
+          <p className="mt-4 text-[15px] leading-relaxed text-ink-700">
+            We will price this on your dates and come back with a full quote.
+          </p>
         </Step>
       )}
 
@@ -887,12 +812,11 @@ export default function PlanForm() {
 /* ---------------- activity step ---------------- */
 
 function ActivityStep({
-  destination, city, nights, all, selected, styles, party, needsHelp,
-  onlyRecommended, setOnlyRecommended, onToggle, onAskForHelp, onCancelHelp, onAddRecommended,
+  destination, city, all, selected, styles, party, needsHelp,
+  onlyRecommended, setOnlyRecommended, onToggle, onAskForHelp, onCancelHelp,
 }: {
   destination: Destination;
   city: string;
-  nights: number;
   all: Activity[];
   selected: string[];
   styles: TripStyle[];
@@ -903,7 +827,6 @@ function ActivityStep({
   onToggle: (id: string) => void;
   onAskForHelp: () => void;
   onCancelHelp: () => void;
-  onAddRecommended: (ids: string[]) => void;
 }) {
   const ranked = sortForParty(all, styles, party);
   const forYou = ranked.filter(
@@ -911,54 +834,47 @@ function ActivityStep({
   );
   const showing = onlyRecommended && forYou.length >= 3 ? forYou : ranked;
   const chosenHere = all.filter((a) => selected.includes(a.id)).length;
-  const ourPick = recommendFor(all, styles, party, Math.max(1, nights)).map((a) => a.id);
 
   return (
     <div>
       <h1 className="text-[1.6rem] leading-tight sm:text-3xl">Things to do in {city}</h1>
       <p className="mt-2 text-[15px] leading-relaxed text-ink-700">
-        {nights} {nights === 1 ? 'night' : 'nights'} here. Pick whatever appeals, or let us
-        do it. Nothing is compulsory and a free day is a perfectly good choice.
+        Pick whatever appeals. Nothing is compulsory.
       </p>
 
-      {/* The "no idea" path, offered before the list rather than buried under it. */}
+      {/* The "no idea" path, offered before the list rather than under it. */}
       {needsHelp ? (
         <div className="mt-5 rounded-xl2 border border-sea bg-sea-100 p-5">
-          <p className="font-semibold text-sea">We will plan {city} for you.</p>
+          <p className="font-semibold text-sea">We will plan {city}.</p>
           <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">
-            Noted. We will put together a {city} plan for {describeGroup(party)} and walk you
-            through it on the call. Nothing is locked in.
+            Noted. We will put something together for {describeGroup(party)} and talk you
+            through it.
           </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <button type="button" onClick={onCancelHelp} className="btn-ghost h-11 min-h-0 px-4 text-sm">
-              Actually, let me pick
-            </button>
-            {ourPick.length > 0 && (
-              <button
-                type="button"
-                onClick={() => onAddRecommended(ourPick)}
-                className="btn-ghost h-11 min-h-0 px-4 text-sm"
-              >
-                Show me what you would choose
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={onCancelHelp}
+            className="btn-ghost mt-4 h-11 min-h-0 px-4 text-sm"
+          >
+            Let me pick instead
+          </button>
         </div>
       ) : (
         <button
           type="button"
           onClick={onAskForHelp}
-          className="mt-5 flex w-full items-start gap-3 rounded-xl2 border border-dashed border-sea bg-sea-100/60 p-4 text-left transition-colors hover:bg-sea-100"
+          className="mt-5 flex w-full items-center justify-between gap-4 rounded-xl2 border border-sand-300 bg-white p-4 text-left transition-colors hover:border-sea hover:bg-sea-100"
         >
-          <span aria-hidden className="mt-0.5 text-lg leading-none">?</span>
           <span>
-            <span className="block font-semibold text-sea">
-              I have no idea. Plan {city} for me.
-            </span>
+            <span className="block font-semibold">Not sure? We will plan {city}.</span>
             <span className="mt-0.5 block text-[14px] leading-snug text-ink-700">
-              Skip this page entirely. We will build it around {describeGroup(party)} and talk
-              you through it.
+              Skip this page and we will build it for {describeGroup(party)}.
             </span>
+          </span>
+          <span
+            aria-hidden
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-sand-300 text-lg leading-none text-ink-500"
+          >
+            ›
           </span>
         </button>
       )}
@@ -992,18 +908,6 @@ function ActivityStep({
               </span>
             </div>
           </div>
-
-          {ourPick.length > 0 && chosenHere === 0 && (
-            <button
-              type="button"
-              onClick={() => onAddRecommended(ourPick)}
-              className="btn-ghost mt-4 w-full text-sm"
-            >
-              {ourPick.length === 1
-                ? `Add the one we would pick for ${describeGroup(party)}`
-                : `Add the ${ourPick.length} we would pick for ${describeGroup(party)}`}
-            </button>
-          )}
 
           <div className="mt-4 grid gap-3">
             {showing.map((a) => (
@@ -1099,13 +1003,12 @@ function describeParty(f: FormState) {
 }
 
 function Done({
-  result, name, destinationName, brochure, estimate, summaryLines,
+  result, name, destinationName, brochure, summaryLines,
 }: {
   result: SubmitResult;
   name: string;
   destinationName: string;
   brochure: string;
-  estimate: ReturnType<typeof estimateTrip> | null;
   summaryLines: string[];
 }) {
   const token = result.status === 'sent' ? result.token : undefined;
@@ -1125,9 +1028,6 @@ function Done({
     '',
     ...summaryLines,
     '',
-    estimate
-      ? `Estimate shown: ${formatInrRange(estimate.total.low, estimate.total.high)} for ${estimate.travellers} travelling, including flights.`
-      : null,
     trackerUrl ? `Track it: ${trackerUrl}` : null,
     editUrl ? `Change it: ${editUrl}` : null,
   ]
@@ -1142,26 +1042,13 @@ function Done({
         Thank you{name ? `, ${name.split(' ')[0]}` : ''}.
       </h1>
       <p className="mt-4 text-[17px] leading-relaxed text-ink-700">
-        We have your {destinationName} plan and a copy is on its way to your email.{' '}
-        {site.quotePromise}
+        Your {destinationName} plan is with us. {site.quotePromise}
       </p>
 
-      {estimate && (
-        <p className="mt-4 rounded-xl bg-sand-100 p-4 text-[15px] leading-relaxed text-ink-700">
-          The estimate you saw was{' '}
-          <strong className="font-semibold">
-            {formatInrRange(estimate.total.low, estimate.total.high)}
-          </strong>{' '}
-          for {estimate.travellers}{' '}
-          {estimate.travellers === 1 ? 'traveller' : 'travellers'}, including flights.
-        </p>
-      )}
-
       <div className="card mt-7 p-5">
-        <h2 className="text-lg">Keep a copy on WhatsApp</h2>
+        <h2 className="text-lg">Send it to yourself on WhatsApp</h2>
         <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">
-          One tap sends your plan and your links to us. It stays in your own chat too, so
-          you always have it, and you can reply there with anything you forgot.
+          One tap. It stays in your chat, and you can add anything you forgot.
         </p>
         <a
           href={whatsappLink(waMessage)}
@@ -1170,49 +1057,31 @@ function Done({
           className="btn-wa mt-4 w-full"
         >
           <WhatsAppGlyph />
-          Send my plan on WhatsApp
+          Send on WhatsApp
         </a>
       </div>
 
       {(trackerUrl || editUrl) && (
-        <div className="card mt-4 p-5">
-          <h2 className="text-lg">Your two links</h2>
-          <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">
-            Both are also in the email we just sent. Bookmark them if it is easier.
-          </p>
-          <ul className="mt-4 space-y-3">
-            {trackerUrl && (
-              <li>
-                <a
-                  href={trackerUrl}
-                  className="font-semibold text-sea underline underline-offset-4"
-                >
-                  Track your booking
-                </a>
-                <p className="mt-0.5 text-sm text-ink-500">
-                  Every step as it happens, from deposit to vouchers.
-                </p>
-              </li>
-            )}
-            {editUrl && (
-              <li>
-                <a
-                  href={editUrl}
-                  className="font-semibold text-sea underline underline-offset-4"
-                >
-                  Change your plan
-                </a>
-                <p className="mt-0.5 text-sm text-ink-500">
-                  Add or remove anything, up until we start booking.
-                </p>
-              </li>
-            )}
-          </ul>
-        </div>
+        <ul className="mt-6 space-y-3">
+          {trackerUrl && (
+            <li>
+              <a href={trackerUrl} className="font-semibold text-sea underline underline-offset-4">
+                Track your booking
+              </a>
+            </li>
+          )}
+          {editUrl && (
+            <li>
+              <a href={editUrl} className="font-semibold text-sea underline underline-offset-4">
+                Change your plan
+              </a>
+            </li>
+          )}
+        </ul>
       )}
 
       {brochure && (
-        <a href={asset(brochure)} download className="btn-ghost mt-4 w-full sm:w-auto">
+        <a href={asset(brochure)} download className="btn-ghost mt-6 w-full sm:w-auto">
           Download the {destinationName} guide
         </a>
       )}
@@ -1220,7 +1089,7 @@ function Done({
       {result.status !== 'sent' && process.env.NODE_ENV === 'development' && (
         <p className="mt-6 text-sm text-ink-300">
           {result.status === 'not-configured'
-            ? 'Development note: NEXT_PUBLIC_APPS_SCRIPT_URL is not set, so this was not written to the sheet and there are no links.'
+            ? 'Development note: NEXT_PUBLIC_APPS_SCRIPT_URL is not set.'
             : `Development note: delivery failed (${result.message}).`}
         </p>
       )}

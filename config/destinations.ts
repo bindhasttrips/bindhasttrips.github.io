@@ -177,7 +177,7 @@ const uae: Destination = {
   ],
   included: [
     'Return international flights, ticketed on your dates',
-    'Hotel stay on twin sharing with daily breakfast',
+    'Hotels or Airbnbs, on twin sharing',
     'Airport pickup and drop in a private vehicle',
     'All intercity transfers between Dubai and Abu Dhabi',
     'Return transfers for every activity in your plan',
@@ -355,7 +355,7 @@ const thailand: Destination = {
   ],
   included: [
     'Return international flights, ticketed on your dates',
-    'Hotel stay on twin sharing with daily breakfast',
+    'Hotels or Airbnbs, on twin sharing',
     'Airport pickup and drop in a private vehicle',
     'All intercity transfers by flight, ferry or private car as the itinerary requires',
     'Return transfers for every activity in your plan',

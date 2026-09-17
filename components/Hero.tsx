@@ -23,13 +23,6 @@ const FRAMES = ORDER.map((key, i) => {
   };
 }).filter((f) => f.src);
 
-const FACTS = [
-  { value: '2', label: 'destinations' },
-  { value: '8', label: 'cities' },
-  { value: '95', label: 'things to do' },
-  { value: '24h', label: 'to an exact quote' },
-];
-
 export default function Hero() {
   return (
     <section className="relative isolate overflow-hidden bg-ink">
@@ -49,31 +42,25 @@ export default function Hero() {
       </div>
 
       <div className="wrap relative flex min-h-[86vh] flex-col justify-end py-16 sm:min-h-[84vh] sm:py-20">
-        <p className="rise-in inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-white backdrop-blur">
-          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-clay-500" />
-          The UAE and Thailand
-        </p>
-
         <h1
-          className="rise-in mt-5 max-w-3xl text-[2.6rem] font-semibold leading-[1.03] tracking-tight text-white sm:text-[4.2rem]"
-          style={{ animationDelay: '0.06s' }}
+          className="rise-in max-w-3xl text-[2.6rem] font-semibold leading-[1.03] tracking-tight text-white sm:text-[4rem]"
         >
-          Your trip abroad,
+          Pick what you want to do.
           <br />
-          handled end to end.
+          We build the trip around it.
         </h1>
 
         <p
           className="rise-in mt-6 max-w-xl text-[17px] leading-relaxed text-sand-200 sm:text-lg"
-          style={{ animationDelay: '0.12s' }}
+          style={{ animationDelay: '0.08s' }}
         >
-          Visa, flights, hotels, transfers and activities arranged as one booking, at one
-          price. Tell us what you want and you will have an estimate in about three minutes.
+          A package trip with an itinerary you choose rather than one you are sold. Visa,
+          flights, stays and transfers all arranged as one booking.
         </p>
 
         <div
           className="rise-in mt-9 flex flex-col gap-3 sm:flex-row"
-          style={{ animationDelay: '0.18s' }}
+          style={{ animationDelay: '0.16s' }}
         >
           <Link href="/plan/" className="btn-primary w-full sm:w-auto">
             Build my trip
@@ -89,20 +76,6 @@ export default function Hero() {
           </a>
         </div>
 
-        <dl
-          className="rise-in mt-10 flex flex-wrap gap-x-10 gap-y-4 border-t border-white/20 pt-6"
-          style={{ animationDelay: '0.24s' }}
-        >
-          {FACTS.map((f) => (
-            <div key={f.label}>
-              <dt className="sr-only">{f.label}</dt>
-              <dd>
-                <span className="text-2xl font-semibold tracking-tight text-white">{f.value}</span>
-                <span className="ml-2 text-sm text-sand-300">{f.label}</span>
-              </dd>
-            </div>
-          ))}
-        </dl>
       </div>
     </section>
   );
