@@ -209,12 +209,7 @@ export default function Dashboard() {
             </p>
           )}
           {bookings.map((b) => (
-            <BookingCard
-              key={b.row}
-              booking={b}
-              adminKey={key}
-              onSaved={() => load(key)}
-            />
+            <BookingCard key={b.row} booking={b} adminKey={key} />
           ))}
         </div>
       ) : (
@@ -246,37 +241,50 @@ export default function Dashboard() {
   );
 }
 
-function BookingCard({
-  booking: b, adminKey, onSaved,
-}: {
-  booking: Booking;
-  adminKey: string;
-  onSaved: () => void;
-}) {
+function BookingCard({ booking: b, adminKey }: { booking: Booking; adminKey: string }) {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState('');
+  const [saved, setSaved] = useState(false);
   const [failed, setFailed] = useState('');
-  // Held locally so a field does not snap back while the write is in flight.
-  const [draft, setDraft] = useState<Record<string, string>>({});
+
+  /**
+   * Values applied locally the instant you change something. Without this a
+   * controlled select snaps back to the server value while the write is still
+   * in flight, which looks exactly like a failure.
+   */
+  const [local, setLocal] = useState<Record<string, string | number | boolean>>({});
+
+  const val = (name: string): string | number | boolean => {
+    if (name in local) return local[name];
+    const v = (b as unknown as Record<string, unknown>)[name];
+    return (v ?? '') as string | number | boolean;
+  };
+
+  const stageVal = (field: string, i: number): string =>
+    field in local ? String(local[field]) : (b.stages[i]?.state ?? 'pending');
 
   const save = async (patch: Patch, label: string) => {
+    const before: Record<string, string | number | boolean> = {};
+    Object.keys(patch).forEach((k) => { before[k] = val(k); });
+    setLocal((l) => ({ ...l, ...patch }));
     setSaving(label);
     setFailed('');
+    setSaved(false);
+
     const res = await updateBooking(adminKey, b.row, patch);
     setSaving('');
     if (!res.ok) {
-      setFailed('Not saved. Try again.');
+      // Put it back. Leaving a value on screen that is not in the sheet is worse.
+      setLocal((l) => ({ ...l, ...before }));
+      setFailed('Not saved');
       return;
     }
-    onSaved();
+    setSaved(true);
   };
 
-  const field = (name: string, fallback: string | number) =>
-    draft[name] ?? String(fallback ?? '');
-
-  const owed = num(b.quotedTotal) - num(b.amountPaid);
+  const owed = num(val('quotedTotal') as number | string) - num(val('amountPaid') as number | string);
   const age = daysAgo(b.timestamp);
-  const tone = STATUS_TONE[String(b.status).toLowerCase()] ?? 'bg-sand-100 text-ink-700';
+  const tone = STATUS_TONE[String(val('status')).toLowerCase()] ?? 'bg-sand-100 text-ink-700';
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
   const wa = b.phone ? `https://wa.me/${String(b.phone).replace(/\D/g, '')}` : '';
 
@@ -288,7 +296,7 @@ function BookingCard({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-semibold">{b.name || 'No name'}</h2>
               <select
-                value={String(b.status)}
+                value={String(val('status'))}
                 onChange={(e) => save({ status: e.target.value }, 'status')}
                 aria-label="Status"
                 className={`cursor-pointer rounded-full border-0 px-2.5 py-1 text-xs font-semibold ${tone}`}
@@ -297,7 +305,10 @@ function BookingCard({
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
-              {saving && <span className="text-xs text-ink-500">saving {saving}</span>}
+              {saving && <span className="text-xs text-ink-500">saving…</span>}
+              {!saving && saved && !failed && (
+                <span className="text-xs font-semibold text-sea">saved</span>
+              )}
               {failed && <span className="text-xs font-semibold text-clay">{failed}</span>}
               {b.helpCities && (
                 <span className="rounded-full bg-sea-100 px-2.5 py-1 text-xs font-semibold text-sea">
@@ -323,9 +334,11 @@ function BookingCard({
           </div>
 
           <div className="text-right">
-            {num(b.quotedTotal) > 0 ? (
+            {num(val('quotedTotal') as number | string) > 0 ? (
               <>
-                <p className="text-lg font-semibold">{formatInr(num(b.quotedTotal))}</p>
+                <p className="text-lg font-semibold">
+                  {formatInr(num(val('quotedTotal') as number | string))}
+                </p>
                 <p className={`text-sm ${owed > 0 ? 'text-clay' : 'text-sea'}`}>
                   {owed > 0 ? `${formatInr(owed)} due` : 'paid in full'}
                 </p>
@@ -389,7 +402,7 @@ function BookingCard({
                   <span className="text-sm text-ink-700">{label}</span>
                   <select
                     className="input mt-1 h-10 min-h-0 text-sm"
-                    value={b.stages[i]?.state ?? 'pending'}
+                    value={stageVal(fieldName, i)}
                     onChange={(e) => save({ [fieldName]: e.target.value }, label.toLowerCase())}
                   >
                     {STAGE_STATES.map((st) => (
@@ -409,8 +422,8 @@ function BookingCard({
                 <input
                   className="input mt-1 h-10 min-h-0 text-sm"
                   inputMode="numeric"
-                  value={field('quotedTotal', b.quotedTotal)}
-                  onChange={(e) => setDraft((d) => ({ ...d, quotedTotal: e.target.value }))}
+                  value={String(val('quotedTotal'))}
+                  onChange={(e) => setLocal((l) => ({ ...l, quotedTotal: e.target.value }))}
                   onBlur={(e) => e.target.value !== String(b.quotedTotal ?? '')
                     && save({ quotedTotal: e.target.value }, 'quote')}
                 />
@@ -420,8 +433,8 @@ function BookingCard({
                 <input
                   className="input mt-1 h-10 min-h-0 text-sm"
                   inputMode="numeric"
-                  value={field('amountPaid', b.amountPaid)}
-                  onChange={(e) => setDraft((d) => ({ ...d, amountPaid: e.target.value }))}
+                  value={String(val('amountPaid'))}
+                  onChange={(e) => setLocal((l) => ({ ...l, amountPaid: e.target.value }))}
                   onBlur={(e) => e.target.value !== String(b.amountPaid ?? '')
                     && save({ amountPaid: e.target.value }, 'payment')}
                 />
@@ -430,7 +443,7 @@ function BookingCard({
                 <span className="text-sm text-ink-700">Payment status</span>
                 <select
                   className="input mt-1 h-10 min-h-0 text-sm"
-                  value={String(b.paymentStatus || 'not started')}
+                  value={String(val('paymentStatus') || 'not started')}
                   onChange={(e) => save({ paymentStatus: e.target.value }, 'payment status')}
                 >
                   {PAYMENT_STATUSES.map((s) => (
@@ -444,8 +457,8 @@ function BookingCard({
               <input
                 className="input mt-1 h-10 min-h-0 text-sm"
                 placeholder="Paste the Razorpay link"
-                value={field('paymentLink', b.paymentLink)}
-                onChange={(e) => setDraft((d) => ({ ...d, paymentLink: e.target.value }))}
+                value={String(val('paymentLink'))}
+                onChange={(e) => setLocal((l) => ({ ...l, paymentLink: e.target.value }))}
                 onBlur={(e) => e.target.value !== String(b.paymentLink ?? '')
                   && save({ paymentLink: e.target.value }, 'link')}
               />
@@ -460,8 +473,8 @@ function BookingCard({
               <textarea
                 className="input mt-2 min-h-20 py-2 text-sm"
                 rows={2}
-                value={field('ownerNotes', b.ownerNotes)}
-                onChange={(e) => setDraft((d) => ({ ...d, ownerNotes: e.target.value }))}
+                value={String(val('ownerNotes'))}
+                onChange={(e) => setLocal((l) => ({ ...l, ownerNotes: e.target.value }))}
                 onBlur={(e) => e.target.value !== String(b.ownerNotes ?? '')
                   && save({ ownerNotes: e.target.value }, 'notes')}
               />
@@ -471,7 +484,7 @@ function BookingCard({
               <input
                 type="checkbox"
                 className="h-5 w-5 accent-[#C4551F]"
-                checked={b.allowEdit}
+                checked={Boolean(val('allowEdit'))}
                 onChange={(e) => save({ allowEdit: e.target.checked }, 'lock')}
               />
               <span className="text-sm text-ink-700">
