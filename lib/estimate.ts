@@ -1,15 +1,10 @@
 import type { Destination, Season } from '../config/types.ts';
 import { seasonForMonth } from '../config/destinations.ts';
 import { roundEstimate } from './format.ts';
-import { MARGIN } from '../config/prices.ts';
+import { MARGIN, ESTIMATE_SPREAD } from '../config/prices.ts';
 
-/**
- * Half-width of the quoted range around the computed midpoint.
- * Tune this one constant to widen or tighten every estimate on the site.
- * The range is the honesty mechanism: it protects margin without inflating
- * the number the customer sees. Do not add a hidden buffer on top of it.
- */
-export const ESTIMATE_SPREAD = 0.12;
+/** Re-exported so callers do not need to know where the rate card lives. */
+export { ESTIMATE_SPREAD };
 
 export interface Range {
   low: number;

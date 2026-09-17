@@ -1,29 +1,107 @@
 /**
- * ACTIVITY PRICES. This is the file to edit.
+ * THE RATE CARD. Every number that affects a price is in this file.
  *
- * Put the price you charge per person, in rupees. `child` is optional: leave
- * it out and the adult price is used for children too. A `0` means there is
- * genuinely no ticket cost, which is different from leaving it null.
+ * Nothing else in the codebase holds a price. Change a figure here and it
+ * flows through the activity cards, the estimate and the sheet.
+ */
+
+/* ============================================================
+ * 1. MARGIN AND SPREAD
+ * ============================================================ */
+
+/**
+ * Your margin on the land package: hotels, transfers, visa and activities.
+ * 1.2 is twenty percent on top of cost. Flights are passed through at cost
+ * and are never marked up, because the customer can check a fare in seconds.
+ */
+export const MARGIN = 1.2;
+
+/**
+ * Half width of the quoted range. 0.12 shows a figure twelve percent either
+ * side of the midpoint. Widen it if you are quoting on thin information.
+ */
+export const ESTIMATE_SPREAD = 0.12;
+
+/* ============================================================
+ * 2. ACCOMMODATION
+ * ============================================================ */
+
+/** Applied to the nightly land rate. 1.0 is the baseline four star price. */
+export const STAY_MULTIPLIERS: Record<string, number> = {
+  hotel3: 0.78,
+  hotel4: 1.0,
+  hotel5: 1.45,
+  apartment: 0.9,
+  value: 0.95,
+};
+
+/* ============================================================
+ * 3. LAND AND FLIGHTS, PER DESTINATION
+ * ============================================================ */
+
+export interface SeasonRate {
+  /** 1 = January through 12 = December. */
+  months: number[];
+  /** Applied to the nightly land rate in those months. */
+  multiplier: number;
+}
+
+export interface RateCard {
+  /** Per person per night, twin sharing, four star, shoulder season. */
+  landPerPersonPerNight: number;
+  /** Children pay this fraction of the adult land rate. */
+  childFactor: number;
+  /** Visa handling, arrival transfers and insurance, per head. */
+  fixedPerPerson: number;
+  /** Return economy airfare. Quoted at cost, never marked up. */
+  flight: { low: number; high: number };
+  seasons: { peak: SeasonRate; shoulder: SeasonRate; off: SeasonRate };
+}
+
+export const RATE_CARDS: Record<string, RateCard> = {
+  uae: {
+    landPerPersonPerNight: 8500,
+    childFactor: 0.6,
+    fixedPerPerson: 9500,
+    flight: { low: 18000, high: 34000 },
+    seasons: {
+      peak: { months: [11, 12, 1, 2, 3], multiplier: 1.25 },
+      shoulder: { months: [4, 10], multiplier: 1.05 },
+      off: { months: [5, 6, 7, 8, 9], multiplier: 0.85 },
+    },
+  },
+  thailand: {
+    landPerPersonPerNight: 6500,
+    childFactor: 0.55,
+    fixedPerPerson: 6000,
+    flight: { low: 16000, high: 30000 },
+    seasons: {
+      peak: { months: [11, 12, 1, 2], multiplier: 1.22 },
+      shoulder: { months: [3, 4, 10], multiplier: 1.05 },
+      off: { months: [5, 6, 7, 8, 9], multiplier: 0.85 },
+    },
+  },
+};
+
+/* ============================================================
+ * 4. ACTIVITY PRICES
+ * ============================================================ */
+
+/**
+ * Per person, in rupees. Four states, and they are not the same thing:
  *
- * null means "not priced yet". Those activities show no price to the customer
- * and are left out of any estimate, rather than counted as free. Fill one in
- * and it starts working immediately, with no other change anywhere.
+ *   { adult: 3200, child: 2600 }   both set
+ *   { adult: 3800 }                children pay the same
+ *   { adult: 0 }                   genuinely no ticket
+ *   { adult: null }                not priced yet
  *
- *   'desert-safari': { adult: 3200, child: 2600 },   both set
- *   'burj-khalifa':  { adult: 3800 },                children pay the same
- *   'la-mer-beach':  { adult: 0 },                   genuinely no ticket
- *   'ain-dubai':     { adult: null },                not priced yet
+ * null shows no price to the customer and is excluded from the estimate,
+ * rather than counted as free. Fill one in and it works immediately.
  */
 export interface ActivityPrice {
   adult: number | null;
   child?: number | null;
 }
-
-/**
- * Your margin, applied to the whole land estimate. 1.2 means twenty percent
- * on top of cost. This is the only place it is set.
- */
-export const MARGIN = 1.2;
 
 export const ACTIVITY_PRICES: Record<string, ActivityPrice> = {
 

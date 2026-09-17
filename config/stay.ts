@@ -1,9 +1,8 @@
 /**
- * Accommodation and budget options.
- *
- * `multiplier` is applied to the land rate, so changing a number here changes
- * every estimate the site produces. This is the main dial you have.
+ * Accommodation and budget options. The multipliers themselves live in
+ * config/prices.ts with the rest of the rate card.
  */
+import { STAY_MULTIPLIERS } from './prices';
 export interface StayType {
   id: string;
   label: string;
@@ -11,13 +10,18 @@ export interface StayType {
   multiplier: number;
 }
 
-export const STAY_TYPES: StayType[] = [
-  { id: 'hotel3', label: 'Hotel, 3 star', hint: 'Clean and central, no frills', multiplier: 0.78 },
-  { id: 'hotel4', label: 'Hotel, 4 star', hint: 'What most people book', multiplier: 1.0 },
-  { id: 'hotel5', label: 'Hotel, 5 star', hint: 'Resorts and known brands', multiplier: 1.45 },
-  { id: 'apartment', label: 'Apartment or Airbnb', hint: 'More space, own kitchen', multiplier: 0.9 },
-  { id: 'value', label: 'Whatever gives the best value', hint: 'We pick and explain why', multiplier: 0.95 },
+const STAY_OPTIONS: Omit<StayType, 'multiplier'>[] = [
+  { id: 'hotel3', label: 'Hotel, 3 star', hint: 'Clean and central, no frills' },
+  { id: 'hotel4', label: 'Hotel, 4 star', hint: 'What most people book' },
+  { id: 'hotel5', label: 'Hotel, 5 star', hint: 'Resorts and known brands' },
+  { id: 'apartment', label: 'Apartment or Airbnb', hint: 'More space, own kitchen' },
+  { id: 'value', label: 'Whatever gives the best value', hint: 'We pick and explain why' },
 ];
+
+export const STAY_TYPES: StayType[] = STAY_OPTIONS.map((s) => ({
+  ...s,
+  multiplier: STAY_MULTIPLIERS[s.id] ?? 1,
+}));
 
 export const NIGHTLY_BUDGETS = [
   'Under 5,000 per room per night',

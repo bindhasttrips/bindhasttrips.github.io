@@ -1,5 +1,16 @@
-import type { Destination } from './types';
-import { ACTIVITY_PRICES } from './prices.ts';
+import type { Destination, SeasonLabel } from './types';
+
+/**
+ * A destination as written in this file: everything except the numbers, which
+ * come from the rate card and are merged in below.
+ */
+type DestinationSource = Omit<Destination, 'pricing'> & {
+  pricingCopy: {
+    flightNote: string;
+    seasonNotes: Record<SeasonLabel, string>;
+  };
+};
+import { ACTIVITY_PRICES, RATE_CARDS } from './prices.ts';
 
 /**
  * PRICES ARE DELIBERATELY BLANK.
@@ -18,7 +29,7 @@ import { ACTIVITY_PRICES } from './prices.ts';
  * which always resolves.
  */
 
-const uae: Destination = {
+const uae: DestinationSource = {
   slug: 'uae',
   name: 'UAE',
   country: 'United Arab Emirates',
@@ -195,22 +206,20 @@ const uae: Destination = {
     'Surcharges on peak dates such as New Year and Eid, confirmed before you pay',
     'Any increase in airfare between the estimate and ticketing, which we confirm with you first',
   ],
-  pricing: {
-    baseLandPerPersonPerNight: 8500,
-    childLandFactor: 0.6,
-    fixedPerPersonInr: 9500,
-    indicativeFlight: { low: 18000, high: 34000, note: 'Return economy from Mumbai, Delhi or Bengaluru.' },
-    seasons: [
-      { label: 'peak', months: [11, 12, 1, 2, 3], multiplier: 1.25, note: 'The best weather of the year, and correspondingly the highest hotel rates.' },
-      { label: 'shoulder', months: [4, 10], multiplier: 1.05, note: 'Warm but comfortable, and noticeably cheaper than peak season.' },
-      { label: 'off', months: [5, 6, 7, 8, 9], multiplier: 0.85, note: 'Hot outdoors, though most attractions are indoors, and rates fall substantially.' },
-    ],
+  // Numbers live in config/prices.ts. These are the words that go with them.
+  pricingCopy: {
+    flightNote: 'Return economy from Mumbai, Delhi or Bengaluru.',
+    seasonNotes: {
+      peak: 'The best weather of the year, and correspondingly the highest hotel rates.',
+      shoulder: 'Warm but comfortable, and noticeably cheaper than peak season.',
+      off: 'Hot outdoors, though most attractions are indoors, and rates fall substantially.',
+    },
   },
   brochure: '/brochures/uae-guide.pdf',
   enabled: true,
 };
 
-const thailand: Destination = {
+const thailand: DestinationSource = {
   slug: 'thailand',
   name: 'Thailand',
   country: 'Thailand',
@@ -373,16 +382,14 @@ const thailand: Destination = {
     'Surcharges on peak dates such as Christmas, New Year and Songkran, confirmed before you pay',
     'Any increase in airfare between the estimate and ticketing, which we confirm with you first',
   ],
-  pricing: {
-    baseLandPerPersonPerNight: 6500,
-    childLandFactor: 0.55,
-    fixedPerPersonInr: 6000,
-    indicativeFlight: { low: 16000, high: 30000, note: 'Return economy from a metro. Kolkata and Chennai are usually cheapest.' },
-    seasons: [
-      { label: 'peak', months: [11, 12, 1, 2], multiplier: 1.22, note: 'Dry and warm with low humidity. The best weather and the highest rates.' },
-      { label: 'shoulder', months: [3, 4, 10], multiplier: 1.05, note: 'Hotter and still mostly dry. Songkran falls in April and is busy.' },
-      { label: 'off', months: [5, 6, 7, 8, 9], multiplier: 0.85, note: 'Monsoon season, usually short afternoon showers rather than continuous rain. Rates fall sharply.' },
-    ],
+  // Numbers live in config/prices.ts. These are the words that go with them.
+  pricingCopy: {
+    flightNote: 'Return economy from a metro. Kolkata and Chennai are usually cheapest.',
+    seasonNotes: {
+      peak: 'Dry and warm with low humidity. The best weather and the highest rates.',
+      shoulder: 'Hotter and still mostly dry. Songkran falls in April and is busy.',
+      off: 'Monsoon season, usually short afternoon showers rather than continuous rain. Rates fall sharply.',
+    },
   },
   brochure: '/brochures/thailand-guide.pdf',
   enabled: true,
@@ -393,9 +400,23 @@ const thailand: Destination = {
  * They are merged in here, so nothing else in the codebase needs to know
  * where a price came from.
  */
-function withPrices(d: Destination): Destination {
+function withPrices(d: DestinationSource): Destination {
+  const card = RATE_CARDS[d.slug];
+  const { pricingCopy, ...rest } = d;
   return {
-    ...d,
+    ...rest,
+    pricing: {
+      baseLandPerPersonPerNight: card.landPerPersonPerNight,
+      childLandFactor: card.childFactor,
+      fixedPerPersonInr: card.fixedPerPerson,
+      indicativeFlight: { ...card.flight, note: pricingCopy.flightNote },
+      seasons: (['peak', 'shoulder', 'off'] as const).map((label) => ({
+        label,
+        months: card.seasons[label].months,
+        multiplier: card.seasons[label].multiplier,
+        note: pricingCopy.seasonNotes[label],
+      })),
+    },
     activities: d.activities.map((a) => {
       const price = ACTIVITY_PRICES[a.id];
       if (!price) return a;
