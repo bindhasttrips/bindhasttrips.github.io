@@ -85,7 +85,7 @@ export const site = {
  * config/prices.ts. Individual activity prices do not need this: they appear
  * on their own as soon as a price exists for them.
  */
-export const SHOW_ESTIMATE = false;
+export const SHOW_ESTIMATE = true;
 
 /** Country code first, digits only. No plus sign, no spaces. */
 export const whatsappNumber =

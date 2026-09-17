@@ -2,7 +2,7 @@
  * Accommodation and budget options. The multipliers themselves live in
  * config/prices.ts with the rest of the rate card.
  */
-import { STAY_MULTIPLIERS } from './prices';
+import { STAY_MULTIPLIERS } from './prices.ts';
 export interface StayType {
   id: string;
   label: string;
