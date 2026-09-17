@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import type { Activity, Destination, GroupType, TripStyle } from '@/config/types';
-import { SHOW_ACTIVITY_PRICES } from '@/config/site';
 import { formatInr } from '@/lib/format';
 import { asset } from '@/lib/asset';
 import { videoLink, hasRealVideo, placeholderTile } from '@/lib/media';
@@ -74,11 +73,13 @@ export default function ActivityCard({
               </span>
               <span className="min-w-0 font-semibold leading-snug">{activity.name}</span>
             </span>
-            {SHOW_ACTIVITY_PRICES && activity.indicativePrice != null && (
-              <span className="shrink-0 text-sm font-semibold text-clay">
-                {activity.indicativePrice === 0 ? 'Free' : formatInr(activity.indicativePrice)}
-              </span>
-            )}
+            <span className="shrink-0 text-sm font-semibold text-clay">
+              {activity.indicativePrice == null
+                ? ''
+                : activity.indicativePrice === 0
+                  ? 'No ticket'
+                  : formatInr(activity.indicativePrice)}
+            </span>
           </span>
 
           <span className="mt-1.5 block pl-9 text-[14px] leading-relaxed text-ink-700">

@@ -80,11 +80,12 @@ export const site = {
 } as const;
 
 /**
- * Per activity prices are hidden from customers until the rate card is final.
- * Prices still drive the estimate: this only controls what is displayed.
- * Flip to true when you are happy with the numbers in config/destinations.ts.
+ * Whether to show the customer an estimated total at the end of the builder.
+ * Off until you are happy with the rate cards and the margin in
+ * config/prices.ts. Individual activity prices do not need this: they appear
+ * on their own as soon as a price exists for them.
  */
-export const SHOW_ACTIVITY_PRICES = false;
+export const SHOW_ESTIMATE = false;
 
 /** Country code first, digits only. No plus sign, no spaces. */
 export const whatsappNumber =

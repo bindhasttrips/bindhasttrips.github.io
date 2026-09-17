@@ -5,7 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { liveDestinations, getDestination, getTier } from '@/config/destinations';
 import { TRIP_STYLES, GROUP_TYPES, type Activity, type Destination, type GroupType, type TripStyle } from '@/config/types';
 import { STAY_TYPES, NIGHTLY_BUDGETS, TOTAL_BUDGETS, stayById } from '@/config/stay';
-import { site, whatsappLink } from '@/config/site';
+import { site, SHOW_ESTIMATE, whatsappLink } from '@/config/site';
 import { estimateTrip } from '@/lib/estimate';
 import { daysFromNights } from '@/lib/itinerary';
 import { formatInr, formatInrRange } from '@/lib/format';
@@ -754,9 +754,36 @@ export default function PlanForm() {
             </div>
           </div>
 
-          <p className="mt-4 text-[15px] leading-relaxed text-ink-700">
-            We will price this on your dates and come back with a full quote.
-          </p>
+          {SHOW_ESTIMATE && estimate ? (
+            <div className="card mt-4 p-5">
+              <p className="text-xs font-semibold uppercase tracking-wider text-ink-500">
+                Estimated total for {estimate.travellers}{' '}
+                {estimate.travellers === 1 ? 'traveller' : 'travellers'}
+              </p>
+              <p className="mt-1 text-[2rem] font-semibold leading-tight tracking-tight">
+                {formatInrRange(estimate.total.low, estimate.total.high)}
+              </p>
+              <p className="mt-1 text-[15px] text-ink-700">
+                About {formatInrRange(estimate.perPerson.low, estimate.perPerson.high)} per
+                person, including flights.
+              </p>
+              {estimate.unpricedActivities > 0 && (
+                <p className="mt-3 text-[15px] text-ink-700">
+                  {estimate.unpricedActivities}{' '}
+                  {estimate.unpricedActivities === 1 ? 'activity is' : 'activities are'} priced
+                  separately and not included above.
+                </p>
+              )}
+              <p className="mt-4 text-sm leading-relaxed text-ink-500">
+                An estimate, not a quote. It moves with your dates and with what flights cost
+                on the day we ticket.
+              </p>
+            </div>
+          ) : (
+            <p className="mt-4 text-[15px] leading-relaxed text-ink-700">
+              We will price this on your dates and come back with a full quote.
+            </p>
+          )}
         </Step>
       )}
 

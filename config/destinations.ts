@@ -1,4 +1,5 @@
 import type { Destination } from './types';
+import { ACTIVITY_PRICES } from './prices.ts';
 
 /**
  * PRICES ARE DELIBERATELY BLANK.
@@ -387,7 +388,27 @@ const thailand: Destination = {
   enabled: true,
 };
 
-export const destinations: Destination[] = [uae, thailand];
+/**
+ * Prices live in config/prices.ts so they can all be edited in one place.
+ * They are merged in here, so nothing else in the codebase needs to know
+ * where a price came from.
+ */
+function withPrices(d: Destination): Destination {
+  return {
+    ...d,
+    activities: d.activities.map((a) => {
+      const price = ACTIVITY_PRICES[a.id];
+      if (!price) return a;
+      return {
+        ...a,
+        indicativePrice: price.adult,
+        childPrice: price.child ?? price.adult,
+      };
+    }),
+  };
+}
+
+export const destinations: Destination[] = [uae, thailand].map(withPrices);
 
 export const liveDestinations = destinations.filter((d) => d.enabled);
 

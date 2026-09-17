@@ -1,6 +1,7 @@
 import type { Destination, Season } from '../config/types.ts';
 import { seasonForMonth } from '../config/destinations.ts';
 import { roundEstimate } from './format.ts';
+import { MARGIN } from '../config/prices.ts';
 
 /**
  * Half-width of the quoted range around the computed midpoint.
@@ -99,10 +100,12 @@ export function estimateTrip(input: EstimateInput): Estimate {
   // Season and accommodation both move hotel and ground cost. Neither moves
   // activity prices, which are set by the operator and hold across the year.
   const stay = input.stayMultiplier ?? 1;
-  const landMid =
+  const cost =
     (adultNights + childNights) * season.multiplier * stay +
     fixed * season.multiplier +
     activityTotal;
+  // Your margin, from config/prices.ts. Flights are quoted at cost.
+  const landMid = cost * MARGIN;
   const land = spread(landMid);
 
   // Airfare scales per head and is not affected by the land season multiplier.

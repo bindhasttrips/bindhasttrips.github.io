@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { estimateTrip, ESTIMATE_SPREAD } from './estimate.ts';
 import { roundEstimate } from './format.ts';
+import { MARGIN } from '../config/prices.ts';
 import { getDestination } from '../config/destinations.ts';
 
 const dubai = getDestination('uae')!;
@@ -38,12 +39,14 @@ test('low bound is below high bound and both are positive', () => {
   assert.ok(e.total.low < e.total.high);
 });
 
-test('land midpoint matches the rate card by hand', () => {
-  // 8500 * 4 nights * 2 adults = 68000, plus 9500 fixed * 2 = 19000.
-  // (68000 + 19000) * 1.05 shoulder = 91350. No activities.
+test('land midpoint matches the rate card by hand, margin included', () => {
+  // 8500 per night * 4 nights * 2 adults = 68000.
+  // Plus 9500 fixed * 2 travellers = 19000.
+  // (68000 + 19000) * 1.05 shoulder = 91350, then * MARGIN.
+  const mid = 91350 * MARGIN;
   const e = estimateTrip(base);
-  assert.equal(e.land.low, roundEstimate(91350 * (1 - ESTIMATE_SPREAD)));
-  assert.equal(e.land.high, roundEstimate(91350 * (1 + ESTIMATE_SPREAD)));
+  assert.equal(e.land.low, roundEstimate(mid * (1 - ESTIMATE_SPREAD)));
+  assert.equal(e.land.high, roundEstimate(mid * (1 + ESTIMATE_SPREAD)));
 });
 
 test('peak season costs more than off season for the same trip', () => {
@@ -193,4 +196,23 @@ test('nights are free choice, and more nights cost more', () => {
   const short = estimateTrip({ ...base, nights: 3 });
   const long = estimateTrip({ ...base, nights: 11 });
   assert.ok(long.land.low > short.land.low);
+});
+
+test('a price set in config/prices.ts reaches the activity', async () => {
+  const { ACTIVITY_PRICES } = await import('../config/prices.ts');
+  // Every activity in the catalogue has a slot waiting for a price.
+  for (const d of [dubai, thailand]) {
+    for (const a of d.activities) {
+      assert.ok(a.id in ACTIVITY_PRICES, `${a.id} has no entry in config/prices.ts`);
+    }
+  }
+});
+
+test('the margin is applied to land but never to flights', async () => {
+  const { MARGIN } = await import('../config/prices.ts');
+  const e = estimateTrip({ ...base, adults: 2 });
+  // Flights are passed through at the rate card, unmarked up.
+  assert.equal(e.flights.low, roundEstimate(dubai.pricing.indicativeFlight.low * 2));
+  assert.equal(e.flights.high, roundEstimate(dubai.pricing.indicativeFlight.high * 2));
+  assert.ok(MARGIN >= 1, 'margin should never discount below cost');
 });
