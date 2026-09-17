@@ -149,7 +149,8 @@ function trackerPayload(token) {
     travelMonth: monthLabel(r[col('travelMonth')]),
     days: r[col('days')],
     travellers: r[col('totalTravellers')],
-    status: r[col('status')] || 'new',
+    // `status` is your internal pipeline label and deliberately never leaves
+    // the sheet. A customer must never see themselves marked "lost".
     paymentStatus: r[col('paymentStatus')] || '',
     stages: stages,
     lastUpdated: asIso(r[col('lastUpdated')]) || asIso(r[col('timestamp')]),

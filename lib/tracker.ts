@@ -14,7 +14,6 @@ export interface TrackerData {
   travelMonth: string;
   days: number | string;
   travellers: number | string;
-  status: string;
   paymentStatus: string;
   stages: TrackerStage[];
   lastUpdated: string;
