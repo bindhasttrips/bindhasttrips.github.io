@@ -270,6 +270,17 @@ function BookingCard({ booking: b, adminKey }: { booking: Booking; adminKey: str
   const stageVal = (field: string, i: number): string =>
     field in local ? String(local[field]) : (b.stages[i]?.state ?? 'pending');
 
+  /**
+   * The bar has to read the same values the dropdowns do, or changing a stage
+   * moves the dropdown and leaves the bar showing the old state until a manual
+   * refresh.
+   */
+  const effectiveStages: Stage[] = (b.stages ?? []).map((stage, i) => {
+    const field = STAGE_FIELDS[i]?.[0];
+    if (!field) return stage;
+    return { ...stage, state: stageVal(field, i) as Stage['state'] };
+  });
+
   const save = async (patch: Patch, label: string) => {
     const fields = Object.keys(patch);
     const before: Record<string, string | number | boolean> = {};
@@ -367,7 +378,7 @@ function BookingCard({ booking: b, adminKey }: { booking: Booking; adminKey: str
           </div>
         </div>
 
-        <StageBar stages={b.stages} />
+        <StageBar stages={effectiveStages} />
 
         <div className="mt-4 flex flex-wrap gap-2">
           {wa && <Action href={wa}>WhatsApp</Action>}
