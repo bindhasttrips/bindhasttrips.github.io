@@ -89,7 +89,7 @@ export interface InquiryPayload {
 export const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
 
 export type SubmitResult =
-  | { status: 'sent' }
+  | { status: 'sent'; token?: string; editToken?: string }
   | { status: 'not-configured' }
   | { status: 'failed'; message: string };
 
@@ -104,7 +104,16 @@ export async function submitInquiry(payload: InquiryPayload): Promise<SubmitResu
       redirect: 'follow',
     });
     if (!res.ok) return { status: 'failed', message: `Server returned ${res.status}` };
-    return { status: 'sent' };
+    // The script hands back the two personal links so the confirmation screen
+    // can put them in front of the customer immediately.
+    try {
+      const body = (await res.json()) as { ok?: boolean; token?: string; editToken?: string };
+      if (body && body.ok === false) return { status: 'failed', message: 'Rejected by the server' };
+      return { status: 'sent', token: body?.token, editToken: body?.editToken };
+    } catch {
+      // A successful write that returned something unparseable is still a write.
+      return { status: 'sent' };
+    }
   } catch (err) {
     return { status: 'failed', message: err instanceof Error ? err.message : 'Network error' };
   }

@@ -12,6 +12,7 @@ import { formatInr, formatInrRange } from '@/lib/format';
 import { asset } from '@/lib/asset';
 import { sortForParty, matchesStyles, recommendFor, type Party } from '@/lib/suggest';
 import ActivityCard from '@/components/ActivityCard';
+import { WhatsAppGlyph } from '@/components/Header';
 import { submitInquiry, fetchEditablePlan, normaliseIndianMobile, type SubmitResult } from '@/lib/inquiry';
 
 const STORAGE_KEY = 'bindhast-plan-v4';
@@ -335,6 +336,22 @@ export default function PlanForm() {
         destinationName={destination?.name ?? ''}
         brochure={destination?.brochure ?? ''}
         estimate={estimate}
+        summaryLines={[
+          `${destination?.name ?? ''}, ${daysFromNights(form.nights)} days`,
+          `${MONTH_NAMES[form.travelMonth - 1]} ${form.travelYear}${form.datesFlexible ? ', flexible' : ''}`,
+          `${describeParty(form)}, flying from ${form.flyingFrom || 'India'}`,
+          `Staying in ${stayById(form.stayType).label}`,
+          ...nightsByCity.map((c) => {
+            if (form.helpCities.includes(c.city)) {
+              return `${c.city} (${c.nights}n): please plan this for me`;
+            }
+            const names = form.activities
+              .map((id) => destination?.activities.find((a) => a.id === id))
+              .filter((a): a is Activity => Boolean(a) && a!.city === c.city)
+              .map((a) => a.name);
+            return `${c.city} (${c.nights}n): ${names.length ? names.join(', ') : 'nothing picked yet'}`;
+          }),
+        ]}
       />
     );
   }
@@ -1039,24 +1056,53 @@ function describeParty(f: FormState) {
 }
 
 function Done({
-  result, name, destinationName, brochure, estimate,
+  result, name, destinationName, brochure, estimate, summaryLines,
 }: {
   result: SubmitResult;
   name: string;
   destinationName: string;
   brochure: string;
   estimate: ReturnType<typeof estimateTrip> | null;
+  summaryLines: string[];
 }) {
+  const token = result.status === 'sent' ? result.token : undefined;
+  const editToken = result.status === 'sent' ? result.editToken : undefined;
+  const origin = typeof window === 'undefined' ? site.url : window.location.origin;
+  const trackerUrl = token ? `${origin}/trip/?t=${token}` : '';
+  const editUrl = editToken ? `${origin}/plan/?e=${editToken}` : '';
+
+  /**
+   * Apps Script cannot send WhatsApp messages, and the Cloud API would take
+   * the business number out of the normal WhatsApp app. So the customer sends
+   * it themselves in one tap: the message lands with us, and the copy plus
+   * both links stay in their own chat history, which is the point.
+   */
+  const waMessage = [
+    name ? `Hello, this is ${name}. I just sent an enquiry from your website.` : 'Hello, I just sent an enquiry from your website.',
+    '',
+    ...summaryLines,
+    '',
+    estimate
+      ? `Estimate shown: ${formatInrRange(estimate.total.low, estimate.total.high)} for ${estimate.travellers} travelling, including flights.`
+      : null,
+    trackerUrl ? `Track it: ${trackerUrl}` : null,
+    editUrl ? `Change it: ${editUrl}` : null,
+  ]
+    // Keep the intentional blank separators; only drop the lines that are off.
+    .filter((line) => line !== null)
+    .join('\n');
+
   return (
-    <div className="wrap max-w-2xl py-16">
+    <div className="wrap max-w-2xl py-14">
       <p className="eyebrow">Received</p>
       <h1 className="mt-3 text-[1.9rem] leading-tight sm:text-4xl">
         Thank you{name ? `, ${name.split(' ')[0]}` : ''}.
       </h1>
       <p className="mt-4 text-[17px] leading-relaxed text-ink-700">
-        We have your {destinationName} plan. {site.quotePromise} We will come back with real
-        prices on your dates and flag anything we would change.
+        We have your {destinationName} plan and a copy is on its way to your email.{' '}
+        {site.quotePromise}
       </p>
+
       {estimate && (
         <p className="mt-4 rounded-xl bg-sand-100 p-4 text-[15px] leading-relaxed text-ink-700">
           The estimate you saw was{' '}
@@ -1067,15 +1113,71 @@ function Done({
           {estimate.travellers === 1 ? 'traveller' : 'travellers'}, including flights.
         </p>
       )}
+
+      <div className="card mt-7 p-5">
+        <h2 className="text-lg">Keep a copy on WhatsApp</h2>
+        <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">
+          One tap sends your plan and your links to us. It stays in your own chat too, so
+          you always have it, and you can reply there with anything you forgot.
+        </p>
+        <a
+          href={whatsappLink(waMessage)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-wa mt-4 w-full"
+        >
+          <WhatsAppGlyph />
+          Send my plan on WhatsApp
+        </a>
+      </div>
+
+      {(trackerUrl || editUrl) && (
+        <div className="card mt-4 p-5">
+          <h2 className="text-lg">Your two links</h2>
+          <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">
+            Both are also in the email we just sent. Bookmark them if it is easier.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {trackerUrl && (
+              <li>
+                <a
+                  href={trackerUrl}
+                  className="font-semibold text-sea underline underline-offset-4"
+                >
+                  Track your booking
+                </a>
+                <p className="mt-0.5 text-sm text-ink-500">
+                  Every step as it happens, from deposit to vouchers.
+                </p>
+              </li>
+            )}
+            {editUrl && (
+              <li>
+                <a
+                  href={editUrl}
+                  className="font-semibold text-sea underline underline-offset-4"
+                >
+                  Change your plan
+                </a>
+                <p className="mt-0.5 text-sm text-ink-500">
+                  Add or remove anything, up until we start booking.
+                </p>
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+
       {brochure && (
-        <a href={asset(brochure)} download className="btn-ghost mt-6 w-full sm:w-auto">
+        <a href={asset(brochure)} download className="btn-ghost mt-4 w-full sm:w-auto">
           Download the {destinationName} guide
         </a>
       )}
+
       {result.status !== 'sent' && process.env.NODE_ENV === 'development' && (
         <p className="mt-6 text-sm text-ink-300">
           {result.status === 'not-configured'
-            ? 'Development note: NEXT_PUBLIC_APPS_SCRIPT_URL is not set, so this was not written to the sheet.'
+            ? 'Development note: NEXT_PUBLIC_APPS_SCRIPT_URL is not set, so this was not written to the sheet and there are no links.'
             : `Development note: delivery failed (${result.message}).`}
         </p>
       )}
