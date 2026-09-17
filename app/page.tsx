@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { liveDestinations } from '@/config/destinations';
 import { site, whatsappLink } from '@/config/site';
-import DestinationCard from '@/components/DestinationCard';
 import Hero from '@/components/Hero';
 import CustomRequestForm from '@/components/CustomRequestForm';
 import { WhatsAppGlyph } from '@/components/Header';
 import { asset } from '@/lib/asset';
+import { TRAVEL_TIPS } from '@/config/tips';
 
 const steps = [
   {
@@ -78,19 +78,68 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Destinations */}
+      {/* Where we work, plus the things people ask before they are ready. */}
       <section className="border-y border-sand-200 bg-sand-100">
         <div className="wrap py-16">
           <h2 className="text-2xl sm:text-3xl">Where we work</h2>
           <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
-            Two destinations, eight cities, and enough knowledge of both to answer a question
-            at short notice. Somewhere else in mind? There is a form for that further down.
+            Two destinations and eight cities, chosen because we know them well enough to
+            answer a question at short notice. Anywhere else, there is a form further down.
           </p>
-          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+
+          <div className="mt-8 grid gap-5 sm:grid-cols-2">
             {liveDestinations.map((d) => (
-              <DestinationCard key={d.slug} destination={d} />
+              <div key={d.slug} className="card overflow-hidden">
+                <div className="aspect-[16/9] bg-sand-200">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={asset(d.cardImage)}
+                    alt={d.heroAlt}
+                    width={800}
+                    height={450}
+                    loading="lazy"
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="p-5">
+                  <h3 className="text-xl">{d.name}</h3>
+                  <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">{d.summary}</p>
+                  <dl className="mt-4 space-y-2 border-t border-sand-200 pt-4 text-[15px]">
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 font-semibold">Cities</dt>
+                      <dd className="text-ink-700">{d.cities.join(', ')}</dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 font-semibold">Visa</dt>
+                      <dd className="text-ink-700">{d.visa.type}</dd>
+                    </div>
+                    <div className="flex gap-2">
+                      <dt className="shrink-0 font-semibold">Best months</dt>
+                      <dd className="text-ink-700">{d.bestMonthsSummary}</dd>
+                    </div>
+                  </dl>
+                </div>
+              </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* Travel information */}
+      <section className="wrap py-16">
+        <p className="eyebrow">Before you book anything</p>
+        <h2 className="mt-3 text-2xl sm:text-3xl">Things worth knowing</h2>
+        <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
+          General travel information, not a sales pitch. These are the questions that come up
+          most often, and the answers do not change much by destination.
+        </p>
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {TRAVEL_TIPS.map((tip) => (
+            <article key={tip.title} className="rounded-xl2 border border-sand-200 bg-white p-5">
+              <h3 className="text-lg leading-snug">{tip.title}</h3>
+              <p className="mt-2 text-[15px] leading-relaxed text-ink-700">{tip.body}</p>
+            </article>
+          ))}
         </div>
       </section>
 

@@ -22,22 +22,12 @@
 @layer utilities {
   /* Slow crossfade and zoom for the hero. Each slide holds, then hands over. */
   @keyframes heroSlide {
-    0%, 28%   { opacity: 1; transform: scale(1.08); }
-    36%, 92%  { opacity: 0; transform: scale(1.14); }
-    100%      { opacity: 1; transform: scale(1.08); }
+    0%, 30%  { opacity: 1; transform: scale(1); }
+    38%, 95% { opacity: 0; transform: scale(1.07); }
+    100%     { opacity: 1; transform: scale(1); }
   }
   .hero-slide {
-    animation: heroSlide 21s ease-in-out infinite;
-  }
-
-  /* The marquee strip under the hero. Duplicated content scrolls one full
-     copy, so the loop has no visible seam. */
-  @keyframes marquee {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
-  }
-  .marquee-track {
-    animation: marquee 38s linear infinite;
+    animation: heroSlide 24s ease-in-out infinite;
   }
 
   @keyframes riseIn {
@@ -51,7 +41,6 @@
   /* Anyone who asks for less motion gets none of it. */
   @media (prefers-reduced-motion: reduce) {
     .hero-slide,
-    .marquee-track,
     .rise-in {
       animation: none !important;
     }
