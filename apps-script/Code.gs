@@ -20,11 +20,14 @@ var SITE_URL = 'https://bindhasttrips.github.io';  // TODO: custom domain later
 var WHATSAPP_NUMBER = '919999999999';         // TODO: digits only, country code first
 
 /**
- * Key for the dashboard at /admin. Anyone holding this can read every
- * booking, so treat it like a password: change it below, and change it again
- * if you ever paste it somewhere public.
+ * Key for the dashboard at /admin. Anyone holding it can read every booking.
+ *
+ * NEVER COMMIT A REAL KEY HERE. This repository is public, so a key in this
+ * file is a key on the internet. Set the real value in the Apps Script
+ * editor, which is private to your Google account, and leave this placeholder
+ * in the repository copy.
  */
-var ADMIN_KEY = 'NiM_vLgAPQrmslNy5_jhlxZNd6G0zIqJ';
+var ADMIN_KEY = 'SET-THIS-IN-THE-APPS-SCRIPT-EDITOR-ONLY';
 
 var STAGES = [
   ['stage_payment', 'Deposit received'],
