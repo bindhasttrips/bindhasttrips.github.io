@@ -19,6 +19,13 @@ var BUSINESS_NAME = 'Bindhast Trips';
 var SITE_URL = 'https://bindhasttrips.github.io';  // TODO: custom domain later
 var WHATSAPP_NUMBER = '919999999999';         // TODO: digits only, country code first
 
+/**
+ * Key for the dashboard at /admin. Anyone holding this can read every
+ * booking, so treat it like a password: change it below, and change it again
+ * if you ever paste it somewhere public.
+ */
+var ADMIN_KEY = 'NiM_vLgAPQrmslNy5_jhlxZNd6G0zIqJ';
+
 var STAGES = [
   ['stage_payment', 'Deposit received'],
   ['stage_visa_submitted', 'Visa submitted'],
@@ -64,6 +71,7 @@ function doPost(e) {
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
+    if (p.admin) return json(adminPayload(p.admin));
     if (p.t) return json(trackerPayload(p.t));
     if (p.e) return json(editPayload(p.e));
     return json({ ok: false, error: 'not found' });
@@ -176,6 +184,101 @@ function handleCustomerUpdate(b) {
       'Tracker: ' + trackerUrl(token));
   }
   return json({ ok: true, token: token });
+}
+
+/**
+ * Everything, for the owner dashboard. Guarded by ADMIN_KEY, which is checked
+ * in constant time so the comparison cannot be timed character by character.
+ */
+function adminPayload(key) {
+  if (!secureEquals(String(key), ADMIN_KEY)) {
+    logFailedLookup('admin');
+    return { ok: false, error: 'not found' };
+  }
+  var sheet = getSheet();
+  var last = sheet.getLastRow();
+  var bookings = [];
+  if (last >= 2) {
+    var data = sheet.getRange(2, 1, last - 1, HEADERS.length).getValues();
+    for (var i = 0; i < data.length; i++) {
+      var r = data[i];
+      if (!r[col('name')] && !r[col('phone')]) continue;
+      var stages = [];
+      for (var sIdx = 0; sIdx < STAGES.length; sIdx++) {
+        stages.push({ label: STAGES[sIdx][1], state: normaliseStage(r[col(STAGES[sIdx][0])]) });
+      }
+      bookings.push({
+        row: i + 2,
+        timestamp: asIso(r[col('timestamp')]),
+        token: r[col('token')],
+        status: r[col('status')] || 'new',
+        name: r[col('name')],
+        phone: String(r[col('phone')] || ''),
+        email: r[col('email')],
+        flyingFrom: r[col('flyingFrom')],
+        destination: r[col('destination')],
+        cities: r[col('cities')],
+        groupType: r[col('groupType')],
+        travelMonth: monthLabel(r[col('travelMonth')]),
+        datesFlexible: r[col('datesFlexible')],
+        nights: r[col('nights')],
+        days: r[col('days')],
+        adults: r[col('adults')],
+        children: r[col('children')],
+        seniors: r[col('seniors')],
+        travellers: r[col('totalTravellers')],
+        styles: r[col('tripStyles')],
+        stayType: r[col('stayType')],
+        budget: r[col('statedBudget')],
+        activityCount: r[col('activityCount')],
+        activities: r[col('activities')],
+        helpCities: r[col('helpCities')],
+        itinerary: r[col('itinerary')],
+        estimateLow: r[col('estimateLow')],
+        estimateHigh: r[col('estimateHigh')],
+        notes: r[col('notes')],
+        quotedTotal: r[col('quotedTotal')],
+        amountPaid: r[col('amountPaid')],
+        paymentLink: r[col('paymentLink')],
+        paymentStatus: r[col('paymentStatus')],
+        stages: stages,
+        lastUpdated: asIso(r[col('lastUpdated')]),
+        allowEdit: String(r[col('allowEdit')]).toUpperCase() === 'TRUE',
+        ownerNotes: r[col('ownerNotes')]
+      });
+    }
+  }
+
+  var custom = [];
+  var cs = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CUSTOM_SHEET);
+  if (cs && cs.getLastRow() >= 2) {
+    var cdata = cs.getRange(2, 1, cs.getLastRow() - 1, CUSTOM_HEADERS.length).getValues();
+    for (var c = 0; c < cdata.length; c++) {
+      if (!cdata[c][4] && !cdata[c][5]) continue;
+      custom.push({
+        row: c + 2, timestamp: asIso(cdata[c][0]), status: cdata[c][1],
+        type: cdata[c][3], name: cdata[c][4], phone: String(cdata[c][5] || ''),
+        email: cdata[c][6], requirement: cdata[c][7]
+      });
+    }
+  }
+
+  return {
+    ok: true,
+    sheetUrl: SpreadsheetApp.getActiveSpreadsheet().getUrl(),
+    whatsappNumber: WHATSAPP_NUMBER,
+    fetchedAt: new Date().toISOString(),
+    bookings: bookings,
+    custom: custom
+  };
+}
+
+/** Length-independent comparison, so a wrong key reveals nothing by timing. */
+function secureEquals(a, b) {
+  if (a.length !== b.length) return false;
+  var diff = 0;
+  for (var i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
 }
 
 /** ONLY these fields ever leave the sheet for a tracker view. */
