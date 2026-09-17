@@ -106,6 +106,8 @@ export default function PlanForm() {
   const [result, setResult] = useState<SubmitResult | null>(null);
   const [onlyRecommended, setOnlyRecommended] = useState(true);
   const [editToken, setEditToken] = useState('');
+  // Honeypot. Hidden from people, irresistible to bots.
+  const [website, setWebsite] = useState('');
   const [editState, setEditState] = useState<'none' | 'loading' | 'editing' | 'locked' | 'missing'>('none');
 
   useEffect(() => {
@@ -283,6 +285,7 @@ export default function PlanForm() {
 
     const res = await submitInquiry({
       ...(editToken ? { action: 'update' as const, editToken } : {}),
+      website,
       name: form!.name.trim(),
       phone,
       email: form!.email.trim(),
@@ -802,6 +805,18 @@ export default function PlanForm() {
             <input className="input" type="email" autoComplete="email" value={form.email}
               onChange={(e) => set('email', e.target.value)} />
           </Field>
+          <div aria-hidden className="absolute left-[-9999px] h-0 w-0 overflow-hidden">
+            <label>
+              Website
+              <input
+                tabIndex={-1}
+                autoComplete="off"
+                value={website}
+                onChange={(e) => setWebsite(e.target.value)}
+              />
+            </label>
+          </div>
+
           <Field label="Anything else we should know" hint="Optional.">
             <textarea className="input min-h-24 py-3" rows={3}
               placeholder="Occasion, dietary needs, mobility, hotel preferences, anything at all."

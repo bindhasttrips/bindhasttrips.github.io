@@ -49,6 +49,8 @@ export async function fetchEditablePlan(editToken: string): Promise<EditablePlan
 }
 
 export interface InquiryPayload {
+  /** Honeypot. Always empty for a human; a bot fills every field it finds. */
+  website?: string;
   /** Present only when an existing enquiry is being changed. */
   action?: 'update';
   editToken?: string;
@@ -132,6 +134,7 @@ export function normaliseIndianMobile(raw: string): string | null {
 
 export interface CustomRequestPayload {
   action: 'custom';
+  website?: string;
   type: string;
   name: string;
   phone: string;

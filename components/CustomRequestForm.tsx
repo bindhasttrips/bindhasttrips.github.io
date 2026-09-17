@@ -19,6 +19,8 @@ export default function CustomRequestForm() {
   const [error, setError] = useState('');
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  // Honeypot. Hidden from people, irresistible to bots.
+  const [website, setWebsite] = useState('');
 
   async function send() {
     if (!requirement.trim()) return setError('Tell us what you need, even roughly.');
@@ -33,6 +35,7 @@ export default function CustomRequestForm() {
     setSending(true);
     await submitCustomRequest({
       action: 'custom',
+      website,
       type,
       name: name.trim(),
       phone: normalised ?? phone.trim(),
@@ -73,6 +76,18 @@ export default function CustomRequestForm() {
             {t}
           </button>
         ))}
+      </div>
+
+      <div aria-hidden className="absolute left-[-9999px] h-0 w-0 overflow-hidden">
+        <label>
+          Website
+          <input
+            tabIndex={-1}
+            autoComplete="off"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+          />
+        </label>
       </div>
 
       <label className="mt-5 block">

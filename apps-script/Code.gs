@@ -69,8 +69,11 @@ var HEADERS = [
 function doPost(e) {
   try {
     if (!e || !e.postData || !e.postData.contents) return json({ ok: false });
+    // Nothing legitimate here is anywhere near this size.
+    if (e.postData.contents.length > 20000) return json({ ok: false, error: 'too large' });
     var body = JSON.parse(e.postData.contents);
 
+    if (body.action === 'admin-read') return json(adminPayload(body.key));
     if (body.action === 'admin-update') return handleAdminUpdate(body);
     if (body.action === 'update') return handleCustomerUpdate(body);
     if (body.action === 'custom') return handleCustomRequest(body);
@@ -84,7 +87,10 @@ function doPost(e) {
 function doGet(e) {
   try {
     var p = (e && e.parameter) || {};
-    if (p.admin) return json(adminPayload(p.admin));
+    // The admin key is never accepted on the query string: it would land in
+    // Apps Script execution logs, browser history and any proxy in between.
+    // Dashboard reads go through doPost instead.
+    if (p.admin) return json({ ok: false, error: 'not found' });
     if (p.t) return json(trackerPayload(p.t));
     if (p.e) return json(editPayload(p.e));
     return json({ ok: false, error: 'not found' });
@@ -94,7 +100,41 @@ function doGet(e) {
   }
 }
 
+/**
+ * Crude but effective limits on the public endpoints. Apps Script cannot see
+ * a client IP, so these are global counters. They exist to stop one person
+ * burning the daily Gmail quota, which would silence every real lead alert.
+ */
+var MAX_SUBMISSIONS_PER_HOUR = 60;
+var MAX_EMAILS_PER_HOUR = 40;
+
+function bump(key, ttlSeconds) {
+  var cache = CacheService.getScriptCache();
+  var n = Number(cache.get(key) || 0) + 1;
+  cache.put(key, String(n), ttlSeconds);
+  return n;
+}
+
+function withinSubmissionBudget() {
+  return bump('submissions', 3600) <= MAX_SUBMISSIONS_PER_HOUR;
+}
+
+/** Rows are always recorded. Only the mail is dropped when the budget is gone. */
+function withinEmailBudget() {
+  return bump('emails', 3600) <= MAX_EMAILS_PER_HOUR;
+}
+
+/** A bot filling every field trips this. A human never sees it. */
+function looksAutomated(b) {
+  return Boolean(b && b.website);
+}
+
 function handleNewInquiry(b) {
+  if (looksAutomated(b)) return json({ ok: true });
+  if (!withinSubmissionBudget()) {
+    console.warn('Submission budget exceeded, dropping request');
+    return json({ ok: false, error: 'busy' });
+  }
   var sheet = getSheet();
   var token = makeToken();
   var editToken = makeToken();
@@ -170,6 +210,8 @@ var CUSTOM_HEADERS = [
  * because these are a different kind of lead and you work them differently.
  */
 function handleCustomRequest(b) {
+  if (looksAutomated(b)) return json({ ok: true });
+  if (!withinSubmissionBudget()) return json({ ok: false, error: 'busy' });
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(CUSTOM_SHEET);
   if (!sheet) {
@@ -194,7 +236,7 @@ function handleCustomRequest(b) {
     clean(b.source, 300)
   ]);
 
-  if (NOTIFY_EMAIL) {
+  if (NOTIFY_EMAIL && withinEmailBudget()) {
     MailApp.sendEmail(NOTIFY_EMAIL,
       'Enquiry: ' + clean(b.type, 60) + ' from ' + clean(b.name, 60),
       [
@@ -507,6 +549,7 @@ function whatsappFormula(r) {
 
 function emailCustomer(b, token, editToken) {
   if (!b.email) return;
+  if (!withinEmailBudget()) return;
   var L = [];
   L.push('Hello ' + clean(b.name, 120) + ',');
   L.push('');
@@ -557,6 +600,7 @@ function emailCustomer(b, token, editToken) {
 
 function emailOwner(b, token) {
   if (!NOTIFY_EMAIL) return;
+  if (!withinEmailBudget()) return;
   var L = [
     clean(b.name, 120) + '  ' + clean(b.phone, 20) + '  ' + clean(b.email, 160),
     'Lives in / flying from: ' + clean(b.flyingFrom, 60),

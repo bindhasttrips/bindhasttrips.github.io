@@ -78,7 +78,12 @@ export async function fetchAdmin(key: string): Promise<AdminResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 60000);
   try {
-    const res = await fetch(`${APPS_SCRIPT_URL}?admin=${encodeURIComponent(key)}`, {
+    // The key goes in the body, never the query string, so it stays out of
+    // execution logs, browser history and proxy logs.
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'admin-read', key }),
       redirect: 'follow',
       signal: controller.signal,
     });
