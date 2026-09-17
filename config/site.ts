@@ -9,6 +9,26 @@ export const site = {
   legalName: 'Bindhast Trips', // TODO: registered entity name
   registration: 'TODO: registration number', // TODO
   /**
+   * A short founder block. Enough of a real person to be trusted, framed as
+   * the founder of a business rather than as the whole business. It makes no
+   * claim about how many people work here.
+   */
+  founder: {
+    eyebrow: 'Who is behind it',
+    name: 'Deep Ghuge',
+    role: 'Founder',
+    photo: '/images/founder.jpg',
+    photoAlt: 'Deep Ghuge',
+    points: [
+      'From Hingoli in Maharashtra, now based in Washington DC while finishing a PhD in Physics.',
+      'Has travelled widely on a student budget, which is where most of the practical knowledge here comes from.',
+      'Started Bindhast after years of planning trips for friends and family, and finding that the planning was the part people dreaded.',
+    ],
+    closing:
+      'Bindhast means carefree in Marathi. That is the standard the service is held to.',
+  },
+
+  /**
    * The About section is about the business, not about any individual. It
    * makes no claim about how many people work here in either direction.
    */

@@ -182,7 +182,40 @@ export default function HomePage() {
             ))}
           </ul>
 
-          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+          {/* Enough of a real person to be trusted. Framed as the founder of
+              a business, which is a different claim from being the business. */}
+          <div className="mt-12 grid gap-7 border-t border-white/60 pt-10 sm:grid-cols-[auto_1fr] sm:items-start">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={asset(site.founder.photo)}
+              alt={site.founder.photoAlt}
+              width={176}
+              height={176}
+              className="h-28 w-28 rounded-full object-cover ring-4 ring-white sm:h-40 sm:w-40"
+            />
+            <div>
+              <p className="eyebrow text-sea">{site.founder.eyebrow}</p>
+              <p className="mt-2 text-xl font-semibold">
+                {site.founder.name}
+                <span className="ml-2 text-base font-normal text-ink-500">
+                  {site.founder.role}
+                </span>
+              </p>
+              <ul className="mt-4 space-y-2.5">
+                {site.founder.points.map((point) => (
+                  <li key={point} className="flex gap-2.5 text-[15px] leading-relaxed text-ink-700">
+                    <span aria-hidden className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-sea" />
+                    <span>{point}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-4 text-[15px] leading-relaxed text-ink-700">
+                {site.founder.closing}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-10 flex flex-col gap-3 sm:flex-row">
             <Link href="/plan/" className="btn-primary w-full sm:w-auto">
               Build my trip
             </Link>
