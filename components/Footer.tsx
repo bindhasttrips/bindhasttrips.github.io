@@ -42,13 +42,11 @@ export default function Footer() {
                 Build your trip
               </Link>
             </li>
-            {liveDestinations.map((d) => (
-              <li key={d.slug}>
-                <Link className="text-ink-700 hover:text-clay" href={`/${d.slug}/`}>
-                  {d.name}
-                </Link>
-              </li>
-            ))}
+            <li>
+              <Link className="text-ink-700 hover:text-clay" href="/#destinations">
+                All {liveDestinations.length} destinations
+              </Link>
+            </li>
             <li>
               <Link className="text-ink-700 hover:text-clay" href="/#custom">
                 Custom trip or visa help

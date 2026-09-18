@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { liveDestinations } from '@/config/destinations';
+import { liveDestinations, destinationsByVisaTier } from '@/config/destinations';
+import { VISA_TIERS } from '@/config/types';
 import { site, whatsappLink } from '@/config/site';
 import Hero from '@/components/Hero';
 import CustomRequestForm from '@/components/CustomRequestForm';
@@ -78,49 +79,62 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Where we work, plus the things people ask before they are ready. */}
-      <section className="border-y border-sand-200 bg-sand-100">
+      {/* Where we work. Grouped by visa effort, because that is the first
+          thing an Indian passport holder actually wants to know. */}
+      <section id="destinations" className="border-y border-sand-200 bg-sand-100">
         <div className="wrap py-16">
           <h2 className="text-2xl sm:text-3xl">Where we work</h2>
           <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
-            Two destinations and eight cities, chosen because we know them well enough to
-            answer a question at short notice. Anywhere else, there is a form further down.
+            {liveDestinations.length} destinations, grouped by how much visa work each one
+            needs on an Indian passport. Somewhere else in mind? There is a form further down.
           </p>
 
-          <div className="mt-8 grid gap-5 sm:grid-cols-2">
-            {liveDestinations.map((d) => (
-              <div key={d.slug} className="card overflow-hidden">
-                <div className="aspect-[16/9] bg-sand-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={asset(d.cardImage)}
-                    alt={d.heroAlt}
-                    width={800}
-                    height={450}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
+          <div className="mt-9 space-y-10">
+            {VISA_TIERS.map((tier) => {
+              const list = destinationsByVisaTier()[tier.id];
+              if (list.length === 0) return null;
+              return (
+                <div key={tier.id}>
+                  <div className="flex flex-wrap items-baseline gap-x-3">
+                    <h3 className="text-lg font-semibold">{tier.label}</h3>
+                    <p className="text-[15px] text-ink-500">{tier.blurb}</p>
+                  </div>
+                  <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {list.map((d) => (
+                      <li key={d.slug} className="card overflow-hidden">
+                        <div className="aspect-[16/9] bg-sand-200">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={asset(d.cardImage)}
+                            alt=""
+                            width={640}
+                            height={360}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        </div>
+                        <div className="p-4">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <h4 className="font-semibold">{d.name}</h4>
+                            {!d.bookable && (
+                              <span className="shrink-0 rounded-full bg-sand-100 px-2 py-0.5 text-xs font-medium text-ink-500">
+                                on request
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-[14px] leading-snug text-ink-700">
+                            {d.tagline}
+                          </p>
+                          <p className="mt-2 text-xs text-ink-300">
+                            {d.cities.slice(0, 3).join(' · ')}
+                          </p>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <div className="p-5">
-                  <h3 className="text-xl">{d.name}</h3>
-                  <p className="mt-1.5 text-[15px] leading-relaxed text-ink-700">{d.summary}</p>
-                  <dl className="mt-4 space-y-2 border-t border-sand-200 pt-4 text-[15px]">
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 font-semibold">Cities</dt>
-                      <dd className="text-ink-700">{d.cities.join(', ')}</dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 font-semibold">Visa</dt>
-                      <dd className="text-ink-700">{d.visa.type}</dd>
-                    </div>
-                    <div className="flex gap-2">
-                      <dt className="shrink-0 font-semibold">Best months</dt>
-                      <dd className="text-ink-700">{d.bestMonthsSummary}</dd>
-                    </div>
-                  </dl>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>

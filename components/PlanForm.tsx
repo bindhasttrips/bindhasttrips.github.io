@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { liveDestinations, getDestination, getTier } from '@/config/destinations';
-import { TRIP_STYLES, GROUP_TYPES, type Activity, type Destination, type GroupType, type TripStyle } from '@/config/types';
+import { liveDestinations, getDestination, getTier, destinationsByVisaTier } from '@/config/destinations';
+import { TRIP_STYLES, GROUP_TYPES, VISA_TIERS, type Activity, type Destination, type GroupType, type TripStyle } from '@/config/types';
 import { STAY_TYPES, NIGHTLY_BUDGETS, TOTAL_BUDGETS, stayById } from '@/config/stay';
 import { site, SHOW_ESTIMATE, whatsappLink } from '@/config/site';
 import { estimateTrip } from '@/lib/estimate';
@@ -393,26 +393,73 @@ export default function PlanForm() {
       <Progress index={stepIndex} total={steps.length} />
 
       {step === 'destination' && (
-        <Step title="Where would you like to go?">
-          <div className="grid gap-3">
-            {liveDestinations.map((d) => (
-              <Choice
-                key={d.slug}
-                selected={form.destination === d.slug}
-                onClick={() => {
-                  set('destination', d.slug);
-                  set('cities', []);
-                  set('activities', []);
-                }}
-                title={d.name}
-                subtitle={d.tagline}
-              />
-            ))}
+        <Step
+          title="Where would you like to go?"
+          subtitle="Grouped by how much visa work each one needs on an Indian passport."
+        >
+          <div className="space-y-7">
+            {VISA_TIERS.map((tier) => {
+              const list = destinationsByVisaTier()[tier.id];
+              if (list.length === 0) return null;
+              return (
+                <div key={tier.id}>
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-ink-500">
+                      {tier.label}
+                    </h2>
+                    <span className="text-sm text-ink-300">{tier.blurb}</span>
+                  </div>
+                  <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+                    {list.map((d) => (
+                      <button
+                        key={d.slug}
+                        type="button"
+                        aria-pressed={form.destination === d.slug}
+                        onClick={() => {
+                          set('destination', d.slug);
+                          set('cities', []);
+                          set('activities', []);
+                          set('helpCities', []);
+                        }}
+                        className={`flex w-full items-stretch overflow-hidden rounded-xl border text-left transition-colors ${
+                          form.destination === d.slug
+                            ? 'border-clay bg-clay-100 ring-1 ring-clay'
+                            : 'border-sand-300 bg-white hover:bg-sand-100'
+                        }`}
+                      >
+                        <span aria-hidden className="w-20 shrink-0 bg-sand-200">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={asset(d.cardImage)}
+                            alt=""
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
+                        </span>
+                        <span className="flex-1 p-3">
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="font-semibold">{d.name}</span>
+                            {!d.bookable && (
+                              <span className="shrink-0 text-xs text-ink-300">on request</span>
+                            )}
+                          </span>
+                          <span className="mt-0.5 block text-[13px] leading-snug text-ink-700">
+                            {d.tagline}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <Note>
-            Malaysia, Singapore and Vietnam are not open yet. Message us if you want one of
-            those and we will tell you when they are.
-          </Note>
+          {destination && !destination.bookable && (
+            <Note>
+              {destination.name} is not bookable online yet. Send this through and we will
+              price it by hand and come back to you.
+            </Note>
+          )}
         </Step>
       )}
 

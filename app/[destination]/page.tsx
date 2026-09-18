@@ -82,6 +82,7 @@ export default async function DestinationPage({ params }: { params: Promise<Para
         </div>
       </section>
 
+      {d.tiers.length > 0 && (
       <section className="wrap py-14">
         <h2 className="text-2xl sm:text-3xl">Packages</h2>
         <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-ink-700">
@@ -150,7 +151,9 @@ export default async function DestinationPage({ params }: { params: Promise<Para
           dates, and we will tell you if moving your travel by a few days lowers it.
         </p>
       </section>
+      )}
 
+      {d.tiers.length > 0 && (
       <section className="border-y border-sand-200 bg-sand-100">
         <div className="wrap py-14">
           <h2 className="text-2xl sm:text-3xl">Sample itinerary</h2>
@@ -163,6 +166,7 @@ export default async function DestinationPage({ params }: { params: Promise<Para
           </div>
         </div>
       </section>
+      )}
 
       <section className="wrap py-14">
         <h2 className="text-2xl sm:text-3xl">What is and is not included</h2>

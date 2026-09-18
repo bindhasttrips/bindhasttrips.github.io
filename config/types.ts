@@ -4,6 +4,21 @@
  */
 
 export type Audience = 'adult' | 'kids' | 'both';
+
+/**
+ * How much visa work a destination needs for an Indian passport. This drives
+ * how destinations are grouped for the customer, and it is also the shape of
+ * the business: no visa means the value is curation, an e-visa is billable
+ * work with near certain approval, and an embassy visa is billable work that
+ * can be refused.
+ */
+export type VisaTier = 'none' | 'evisa' | 'embassy';
+
+export const VISA_TIERS: { id: VisaTier; label: string; blurb: string }[] = [
+  { id: 'none', label: 'No visa needed', blurb: 'Walk in on an Indian passport' },
+  { id: 'evisa', label: 'Easy e-visa', blurb: 'Applied online, we handle it' },
+  { id: 'embassy', label: 'Visa required', blurb: 'More paperwork, we do it for you' },
+];
 export type SeasonLabel = 'peak' | 'shoulder' | 'off';
 
 /** Drives which activities are suggested. The whole customisation pitch. */
@@ -140,6 +155,7 @@ export interface Destination {
   slug: string;
   name: string;
   country: string;
+  visaTier: VisaTier;
   tagline: string;
   heroImage: string;
   heroAlt: string;
@@ -153,6 +169,7 @@ export interface Destination {
   visa: VisaInfo;
   costSamples: CostSample[];
   costSamplesNote: string;
+  /** Optional. A destination with no tiers simply has no packages section. */
   tiers: PackageTier[];
   activities: Activity[];
   included: string[];
@@ -160,4 +177,6 @@ export interface Destination {
   pricing: DestinationPricing;
   brochure: string;
   enabled: boolean;
+  /** False while we can advertise it but not yet book it. */
+  bookable: boolean;
 }
