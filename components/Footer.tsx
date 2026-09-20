@@ -44,7 +44,7 @@ export default function Footer() {
             </li>
             <li>
               <Link className="text-ink-700 hover:text-clay" href="/#destinations">
-                All {liveDestinations.length} destinations
+                All {liveDestinations.length} destination guides
               </Link>
             </li>
             <li>

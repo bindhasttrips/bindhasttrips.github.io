@@ -83,29 +83,36 @@ export default function HomePage() {
         <div className="wrap py-16">
           <h2 className="text-2xl sm:text-3xl">Where we work</h2>
           <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
-            {liveDestinations.length} destinations. Somewhere else in mind? There is a form
-            further down.
+            {liveDestinations.length} destinations, each with a proper guide: when to go, how
+            long you need, what to skip, and the things nobody tells you. Somewhere else in
+            mind? There is a form further down.
           </p>
 
           <ul className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {liveDestinations.map((d) => (
-              <li key={d.slug} className="card overflow-hidden">
-                <div className="aspect-[16/9] bg-sand-200">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={asset(d.cardImage)}
-                    alt=""
-                    width={640}
-                    height={360}
-                    loading="lazy"
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div className="p-4">
-                  <h3 className="font-semibold">{d.name}</h3>
-                  <p className="mt-1 text-[14px] leading-snug text-ink-700">{d.tagline}</p>
-                  <p className="mt-2 text-xs text-ink-300">{d.cities.slice(0, 3).join(' · ')}</p>
-                </div>
+              <li key={d.slug}>
+                <Link
+                  href={`/${d.slug}/`}
+                  className="card group flex h-full flex-col overflow-hidden transition-shadow hover:shadow-lg"
+                >
+                  <div className="aspect-[16/9] overflow-hidden bg-sand-200">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={asset(d.cardImage)}
+                      alt=""
+                      width={640}
+                      height={360}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+                    />
+                  </div>
+                  <div className="flex flex-1 flex-col p-4">
+                    <h3 className="font-semibold">{d.name}</h3>
+                    <p className="mt-1 text-[14px] leading-snug text-ink-700">{d.tagline}</p>
+                    <p className="mt-2 text-xs text-ink-300">{d.cities.slice(0, 3).join(' · ')}</p>
+                    <p className="mt-3 text-sm font-semibold text-clay">Read the guide</p>
+                  </div>
+                </Link>
               </li>
             ))}
           </ul>
