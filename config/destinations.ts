@@ -496,7 +496,7 @@ const maldives: DestinationSource = {
   currency: { code: 'MVR', symbol: 'MVR', approxInrPerUnit: 5.6 },
   visa: {
     required: false,
-    type: 'Free 30 day visa on arrival',
+    type: 'Free 30 day visa on arrival, with prepaid registered accommodation',
     timeline: 'Issued at the airport, no application needed.',
     feeInr: 0,
     documents: DEFAULT_VISA_DOCS,
@@ -588,7 +588,7 @@ const mauritius: DestinationSource = {
   currency: { code: 'MUR', symbol: 'MUR', approxInrPerUnit: 1.9 },
   visa: {
     required: false,
-    type: 'Free 60 day entry permit on arrival',
+    type: 'Free 90 day entry permit on arrival',
     timeline: 'Issued at the airport.',
     feeInr: 0,
     documents: DEFAULT_VISA_DOCS,
