@@ -2,13 +2,12 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { liveDestinations, getDestination } from '@/config/destinations';
-import { site, whatsappLink } from '@/config/site';
+import { site } from '@/config/site';
 import { formatInr, formatInrRange } from '@/lib/format';
 import { asset } from '@/lib/asset';
 import ItineraryTabs from '@/components/ItineraryTabs';
 import Guide from '@/components/Guide';
 import { getGuide } from '@/config/guides';
-import { WhatsAppGlyph } from '@/components/Header';
 
 type Params = { destination: string };
 
@@ -59,18 +58,9 @@ export default async function DestinationPage({ params }: { params: Promise<Para
                 {d.visa.required ? `${d.visa.type}, arranged by us` : d.visa.type}
               </Fact>
             </dl>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <a
-                href={whatsappLink(`Hello, I am interested in a ${d.name} trip.`)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="btn-wa w-full sm:w-auto"
-              >
-                <WhatsAppGlyph />
-                Message on WhatsApp
-              </a>
-              <Link href={planHref} className="btn-ghost w-full sm:w-auto">
-                Send your requirements
+            <div className="mt-7">
+              <Link href={planHref} className="btn-primary w-full sm:w-auto">
+                Build your trip
               </Link>
             </div>
           </div>
@@ -258,18 +248,9 @@ export default async function DestinationPage({ params }: { params: Promise<Para
           Send your dates and requirements and you will see an estimate immediately.{' '}
           {site.quotePromise}
         </p>
-        <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <a
-            href={whatsappLink(`Hello, I would like a quote for ${d.name}.`)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-wa w-full sm:w-auto"
-          >
-            <WhatsAppGlyph />
-            Message on WhatsApp
-          </a>
-          <Link href={planHref} className="btn-ghost w-full sm:w-auto">
-            Send your requirements
+        <div className="mt-8">
+          <Link href={planHref} className="btn-primary w-full sm:w-auto">
+            Build your trip
           </Link>
         </div>
       </section>
