@@ -6,6 +6,8 @@ import { site, whatsappLink } from '@/config/site';
 import { formatInr, formatInrRange, roundEstimate } from '@/lib/format';
 import { asset } from '@/lib/asset';
 import ItineraryTabs from '@/components/ItineraryTabs';
+import Guide from '@/components/Guide';
+import { getGuide } from '@/config/guides';
 import { WhatsAppGlyph } from '@/components/Header';
 
 type Params = { destination: string };
@@ -37,6 +39,7 @@ export default async function DestinationPage({ params }: { params: Promise<Para
   const { destination: slug } = await params;
   const d = getDestination(slug);
   if (!d) notFound();
+  const guide = getGuide(d.slug);
 
   const planHref = `/plan/?dest=${d.slug}`;
   const flight = d.pricing.indicativeFlight;
@@ -81,6 +84,20 @@ export default async function DestinationPage({ params }: { params: Promise<Para
           />
         </div>
       </section>
+
+      {guide && (
+        <>
+          <section className="border-b border-sand-200">
+            <div className="wrap py-12">
+              <p className="eyebrow">The honest guide</p>
+              <p className="mt-3 max-w-3xl text-[17px] leading-relaxed text-ink-700">
+                {guide.intro}
+              </p>
+            </div>
+          </section>
+          <Guide guide={guide} name={d.name} />
+        </>
+      )}
 
       {d.tiers.length > 0 && (
       <section className="wrap py-14">
@@ -210,7 +227,9 @@ export default async function DestinationPage({ params }: { params: Promise<Para
                     : 'None'}
                 </Fact>
               </dl>
-              <p className="mt-5 text-[16px] leading-relaxed text-ink-700">{d.visa.handledByUs}</p>
+              <p className="mt-5 text-[16px] leading-relaxed text-ink-700">
+                {guide?.visaNote ?? d.visa.handledByUs}
+              </p>
               {d.visa.caveat && (
                 <p className="mt-4 rounded-xl bg-sand-100 p-4 text-[15px] leading-relaxed text-ink-700">
                   <strong className="font-semibold">Please note. </strong>
