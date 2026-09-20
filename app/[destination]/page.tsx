@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { liveDestinations, getDestination } from '@/config/destinations';
 import { site, whatsappLink } from '@/config/site';
-import { formatInr, formatInrRange, roundEstimate } from '@/lib/format';
+import { formatInr, formatInrRange } from '@/lib/format';
 import { asset } from '@/lib/asset';
 import ItineraryTabs from '@/components/ItineraryTabs';
 import Guide from '@/components/Guide';
@@ -97,77 +97,6 @@ export default async function DestinationPage({ params }: { params: Promise<Para
           </section>
           <Guide guide={guide} name={d.name} />
         </>
-      )}
-
-      {d.tiers.length > 0 && (
-      <section className="wrap py-14">
-        <h2 className="text-2xl sm:text-3xl">Packages</h2>
-        <p className="mt-2 max-w-2xl text-[16px] leading-relaxed text-ink-700">
-          All figures are per person on twin sharing and are estimates. The land package
-          covers hotels, transfers, visa handling and the listed activities. Flights are shown
-          separately because airfare changes with the date, and are confirmed on your dates
-          before you pay.
-        </p>
-
-        <div className="mt-8 grid gap-5 lg:grid-cols-3">
-          {d.tiers.map((tier) => {
-            const totalLow = roundEstimate(tier.fromPricePerPerson + flight.low);
-            const totalHigh = roundEstimate(tier.fromPricePerPerson + flight.high);
-            return (
-              <div
-                key={tier.id}
-                className={`card flex flex-col p-5 ${tier.recommended ? 'ring-2 ring-clay' : ''}`}
-              >
-                <h3 className="text-xl">{tier.name}</h3>
-                <p className="mt-1 text-sm text-ink-500">
-                  {tier.days} days, {tier.nights} nights
-                </p>
-
-                <dl className="mt-4 space-y-1.5 border-y border-sand-200 py-4">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[15px] text-ink-700">Land package, from</dt>
-                    <dd className="font-semibold">{formatInr(tier.fromPricePerPerson)}</dd>
-                  </div>
-                  <div className="flex items-baseline justify-between gap-3">
-                    <dt className="text-[15px] text-ink-700">Flights, estimated</dt>
-                    <dd className="font-semibold">{formatInrRange(flight.low, flight.high)}</dd>
-                  </div>
-                </dl>
-
-                <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-ink-500">
-                  Estimated total per person
-                </p>
-                <p className="mt-1 text-[1.75rem] font-semibold leading-tight tracking-tight">
-                  {formatInrRange(totalLow, totalHigh)}
-                </p>
-
-                <p className="mt-4 text-[15px] leading-relaxed text-ink-700">{tier.blurb}</p>
-                <ul className="mt-4 flex-1 space-y-2 text-[15px] text-ink-700">
-                  {tier.highlights.map((h) => (
-                    <li key={h} className="flex gap-2">
-                      <Check />
-                      <span>{h}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link
-                  href={`${planHref}&tier=${tier.id}`}
-                  className={`mt-6 ${tier.recommended ? 'btn-primary' : 'btn-ghost'}`}
-                >
-                  Get an exact quote
-                </Link>
-              </div>
-            );
-          })}
-        </div>
-
-        <p className="mt-5 max-w-3xl rounded-xl bg-sand-100 p-4 text-sm leading-relaxed text-ink-700">
-          <strong className="font-semibold">About the flight figure. </strong>
-          {formatInrRange(flight.low, flight.high)} is an estimate for a return economy ticket
-          from a metro airport. {flight.note} Your quote will carry the real fare for your
-          dates, and we will tell you if moving your travel by a few days lowers it.
-        </p>
-      </section>
       )}
 
       {d.tiers.length > 0 && (
