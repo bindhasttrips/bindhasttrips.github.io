@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { whatsappLink } from '@/config/site';
+import { SAVINGS, whatsappLink } from '@/config/site';
 import { asset } from '@/lib/asset';
 import { PHOTO_CREDITS } from '@/config/photos';
 import { WhatsAppGlyph } from '@/components/Header';
@@ -45,18 +45,18 @@ export default function Hero() {
         <h1
           className="rise-in max-w-3xl text-[2.6rem] font-semibold leading-[1.03] tracking-tight text-white sm:text-[4rem]"
         >
-          Book Smart.
+          Everything a package does.
           <br />
-          Travel Cheap.
+          <span className="text-clay-500">Without the group.</span>
         </h1>
 
         <p
           className="rise-in mt-6 max-w-xl text-[17px] leading-relaxed text-sand-200 sm:text-lg"
           style={{ animationDelay: '0.08s' }}
         >
-          We do everything we can to keep the cost down, so you can travel more often. You
-          choose what you want to see and do. We handle the visa, the bookings and the
-          briefing, and leave room for the spontaneity that makes a trip worth taking.
+          Visa, flights, hotels, transfers and activities, all booked and briefed before you
+          fly. You choose the itinerary instead of following one, and you are not paying for
+          a coach, a tour manager or forty strangers{SAVINGS.claim ? `, which is why it works out around ${SAVINGS.claim} less` : ''}.
         </p>
 
         <div

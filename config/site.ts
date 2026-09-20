@@ -64,7 +64,7 @@ export const site = {
       },
     ],
   },
-  tagline: 'Trips abroad, handled end to end.',
+  tagline: 'Everything a package does, without the group.',
   url: 'https://bindhasttrips.github.io', // TODO: custom domain
   email: 'hello@bindhasttrips.com', // TODO
   responsePromise: 'WhatsApp replies within a few hours, 9am to 10pm IST.',
@@ -86,6 +86,25 @@ export const site = {
  * on their own as soon as a price exists for them.
  */
 export const SHOW_ESTIMATE = true;
+
+/**
+ * The savings claim, stated on the landing page.
+ *
+ * This is YOUR number and you will be asked to justify it on a call, so set
+ * it to something you can defend against a real packaged quote for the same
+ * dates. Set claim to an empty string and every mention of it disappears
+ * from the site while the rest of the section still works.
+ *
+ * Once you have ten or fifteen bookings, replace it with the real average
+ * from your sheet. A figure you can evidence is worth far more than an
+ * estimate.
+ */
+export const SAVINGS = {
+  /** e.g. '20 percent'. Empty string hides the claim entirely. */
+  claim: '20 percent',
+  /** The comparison being made. Keep it specific. */
+  against: 'a comparable group package on the same dates',
+};
 
 /** Country code first, digits only. No plus sign, no spaces. */
 export const whatsappNumber =

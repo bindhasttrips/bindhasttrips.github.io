@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { liveDestinations } from '@/config/destinations';
-import { site, whatsappLink } from '@/config/site';
+import { site, SAVINGS, whatsappLink } from '@/config/site';
 import Hero from '@/components/Hero';
 import CustomRequestForm from '@/components/CustomRequestForm';
 import { WhatsAppGlyph } from '@/components/Header';
@@ -25,6 +25,23 @@ const steps = [
   },
 ];
 
+const NOT_PAYING_FOR = [
+  'A coach and a tour manager, split across forty strangers',
+  'Hotels picked for group rates rather than for you',
+  'The shopping stops that pay commission back to the operator',
+  'Activities you would never have chosen, bundled in to pad the brochure',
+  'The unsold seats on a fixed departure, priced into everyone else\'s ticket',
+  'A fixed route that moves whether you are enjoying a place or not',
+];
+
+const STILL_GET = [
+  'Every booking made for you: visa, flights, hotels, transfers, activities',
+  'Tickets issued before you fly, so nothing is queued for on the day',
+  'A full briefing on what to expect, what it costs there and what to avoid',
+  'One price agreed in writing before anything is booked',
+  'Someone on WhatsApp for the whole trip, including at 2am',
+];
+
 const included = [
   'Visa application, documentation and fees where a visa is required',
   'Return flights, ticketed on your dates',
@@ -39,6 +56,56 @@ export default function HomePage() {
   return (
     <>
       <Hero />
+
+      {/* Why it costs less. The mechanism, not just the claim: a number on its
+          own invites an argument, a reason survives one. */}
+      <section className="border-b border-sand-200">
+        <div className="wrap py-16">
+          <p className="eyebrow">Why it costs less</p>
+          <h2 className="mt-3 max-w-3xl text-2xl sm:text-3xl">
+            The same trip, without the parts you never wanted
+          </h2>
+          <p className="mt-3 max-w-2xl text-[16px] leading-relaxed text-ink-700">
+            A packaged tour has to cover a coach, a tour manager and the seats nobody bought,
+            and it spreads that across everyone on it. Yours does not.
+          </p>
+
+          <div className="mt-9 grid gap-8 lg:grid-cols-2">
+            <div>
+              <h3 className="text-lg">What you are not paying for</h3>
+              <ul className="mt-4 space-y-2.5">
+                {NOT_PAYING_FOR.map((item) => (
+                  <li key={item} className="flex gap-2.5 text-[15px] leading-relaxed text-ink-700">
+                    <Cross />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="text-lg">What you still get</h3>
+              <ul className="mt-4 space-y-2.5">
+                {STILL_GET.map((item) => (
+                  <li key={item} className="flex gap-2.5 text-[15px] leading-relaxed text-ink-700">
+                    <Check />
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {SAVINGS.claim && (
+            <p className="mt-9 max-w-3xl rounded-xl2 border-l-4 border-clay bg-clay-100 p-5 text-[16px] leading-relaxed text-ink-700">
+              <strong className="font-semibold">
+                It usually works out around {SAVINGS.claim} less than {SAVINGS.against}.
+              </strong>{' '}
+              Ask us to show you the breakdown against a quote you have been given. If we
+              cannot beat it, we will tell you so.
+            </p>
+          )}
+        </div>
+      </section>
 
       {/* Build your trip: the form is the point of the page, so it comes first. */}
       <section id="plan" className="wrap py-16">
@@ -231,6 +298,14 @@ export default function HomePage() {
         </div>
       </section>
     </>
+  );
+}
+
+function Cross() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden className="mt-1 h-4 w-4 shrink-0 text-clay" fill="currentColor">
+      <path d="m10 8.6 3.9-3.9 1.4 1.4-3.9 3.9 3.9 3.9-1.4 1.4-3.9-3.9-3.9 3.9-1.4-1.4 3.9-3.9-3.9-3.9 1.4-1.4z" />
+    </svg>
   );
 }
 
